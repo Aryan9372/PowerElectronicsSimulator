@@ -232,7 +232,11 @@ function computeElectricalNets() {
 // Playback & Speed Controls
 // -------------------------------------------------------------
 function togglePlayPause() {
-    isPlaying = !isPlaying;
+    setPlaybackState(!isPlaying);
+}
+
+function setPlaybackState(playing) {
+    isPlaying = !!playing;
     const btn = document.getElementById('playPauseBtn');
     const icon = document.getElementById('playIcon');
     const label = document.getElementById('playLabel');
@@ -301,12 +305,13 @@ function loadAndClosePreset(name) {
 }
 
 // Real-Time Playback & Animation State
-let isPlaying = true;
+let isPlaying = false;
 let currentCycleAngleDeg = 0.0; // 0.0 to 360.0 degrees
 let simSpeed = 0.5; // Playback speed (0.1x to 2x)
 let lastFrameTime = performance.now();
 let lastDomUpdateTime = 0;
 let particlePhase = 0;
+let currentFlowSmoothing = new Map();
 let lastActiveConductorsStr = '';
 
 // Main Animation Loop
@@ -320,7 +325,9 @@ function animateLoop(timestamp) {
         currentCycleAngleDeg = (currentCycleAngleDeg + angleSpeedDegPerSec * dt) % 360.0;
     }
 
-    particlePhase += dt * 35.0 * simSpeed;
+    if (isPlaying && lastSimResults) {
+        particlePhase += dt * 35.0 * simSpeed;
+    }
 
     // Render Canvas at 60 FPS
     renderCanvas();
@@ -627,6 +634,7 @@ function setTransientViewDuration(val) {
         const simCyclesSelect = document.getElementById('simCyclesSelect');
         if (simCyclesSelect) simCyclesSelect.value = 'custom';
 
+        updateSimStatus('simulating', 'Calculating transient...');
         clearTimeout(autoSimDebounceTimer);
         autoSimDebounceTimer = setTimeout(() => {
             runSimulation(true);
@@ -1181,10 +1189,16 @@ function updateConductionStatusText(activeConductors) {
 // -------------------------------------------------------------
 function drawCurrentFlowParticles(stepIdx) {
     ctx.save();
-    ctx.fillStyle = '#38bdf8';
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.shadowColor = 'rgba(56, 189, 248, 0.55)';
+    ctx.shadowBlur = 7;
 
     components.forEach(c => {
-        const iVal = getComponentCurrent(c, stepIdx);
+        const rawCurrent = getComponentCurrent(c, stepIdx);
+        const prevCurrent = currentFlowSmoothing.get(c.id) ?? rawCurrent;
+        const iVal = prevCurrent + (rawCurrent - prevCurrent) * 0.18;
+        currentFlowSmoothing.set(c.id, iVal);
+
         if (Math.abs(iVal) < 0.005) return; // Negligible current
 
         const x1 = c.p1.x, y1 = c.p1.y;
@@ -1195,18 +1209,30 @@ function drawCurrentFlowParticles(stepIdx) {
         if (len < 5) return;
 
         const dir = (iVal >= 0) ? 1 : -1;
-        const spacing = 18; // Dot spacing in pixels
-        const speedMultiplier = Math.min(2.5, Math.max(0.5, Math.log10(1 + Math.abs(iVal) * 5)));
+        const spacing = 22; // Dot spacing in pixels
+        const magnitude = Math.min(1, Math.log10(1 + Math.abs(iVal) * 7) / 1.5);
+        const speedMultiplier = 0.45 + magnitude * 1.45;
         const offset = ((particlePhase * speedMultiplier * dir) % spacing + spacing) % spacing;
 
         const ux = dx / len;
         const uy = dy / len;
+        const alpha = 0.3 + magnitude * 0.55;
+        const radius = 1.8 + magnitude * 1.1;
 
         for (let d = offset; d < len; d += spacing) {
             const px = x1 + ux * d;
             const py = y1 + uy * d;
+            const trailX = px - ux * dir * 5;
+            const trailY = py - uy * dir * 5;
+
+            ctx.fillStyle = `rgba(14, 165, 233, ${alpha * 0.28})`;
             ctx.beginPath();
-            ctx.arc(px, py, 2.5, 0, Math.PI * 2);
+            ctx.arc(trailX, trailY, Math.max(1.2, radius * 0.55), 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = `rgba(103, 232, 249, ${alpha})`;
+            ctx.beginPath();
+            ctx.arc(px, py, radius, 0, Math.PI * 2);
             ctx.fill();
         }
     });
@@ -1855,9 +1881,11 @@ function clearCircuit() {
     selectedComp = null;
     lastSimResults = null;
     activeChannels.clear();
+    currentFlowSmoothing.clear();
     invalidateNets();
     updatePropsInspector();
     resetStats();
+    setPlaybackState(false);
     resumeSweep();
 
     // Completely purge and reset the Oscilloscope plot & channel checkboxes
@@ -2107,11 +2135,19 @@ async function runSimulation(isBackgroundAuto = false) {
     if (groundNodes.size === 0) return;
     if (isSimulating) {
         hasPendingSimulateRequest = true;
+        updateSimStatus('warning', 'Queued');
         return;
     }
 
     isSimulating = true;
     const runBtn = document.getElementById('runBtn');
+    const statusMessage = graphViewMode === 'transient' ? 'Calculating transient...' : 'Solving...';
+    updateSimStatus('simulating', statusMessage);
+    if (simWatchdogTimer) clearTimeout(simWatchdogTimer);
+    simWatchdogTimer = setTimeout(() => {
+        if (isSimulating) updateSimStatus('warning', 'Still calculating...');
+    }, 1200);
+
     if (!isBackgroundAuto && runBtn) {
         runBtn.innerHTML = '<i class="fa-solid fa-spinner animate-spin"></i> Solving...';
         runBtn.disabled = true;
@@ -2227,6 +2263,7 @@ async function runSimulation(isBackgroundAuto = false) {
 
         const data = await response.json();
         lastSimResults = data;
+        currentFlowSmoothing.clear();
 
         // Filter activeChannels to only retain channels that actually exist in new results
         const validChannels = new Set();
@@ -2284,10 +2321,21 @@ async function runSimulation(isBackgroundAuto = false) {
         document.getElementById('connectionStatus').innerHTML = `
             <span class="w-2 h-2 rounded-full bg-emerald-400 inline-block animate-pulse"></span> Solved Live (${data.time.length} pts)
         `;
+        updateSimStatus('success', `Solved ${data.time.length} pts`);
 
     } catch (err) {
         console.warn('Simulation error:', err.message);
+        updateSimStatus('error', 'Solver error');
+        showToast(`Simulation failed: ${err.message}`, 'error');
+        const connStatus = document.getElementById('connectionStatus');
+        if (connStatus) {
+            connStatus.innerHTML = '<span class="w-2 h-2 rounded-full bg-rose-500 inline-block"></span> Solver Error';
+        }
     } finally {
+        if (simWatchdogTimer) {
+            clearTimeout(simWatchdogTimer);
+            simWatchdogTimer = null;
+        }
         isSimulating = false;
         if (!isBackgroundAuto && runBtn) {
             runBtn.innerHTML = '<i class="fa-solid fa-play"></i> Run Simulation';
@@ -2776,6 +2824,8 @@ function loadPreset(name) {
     selectedComp = null;
     lastSimResults = null;
     hasPendingSimulateRequest = false;
+    currentFlowSmoothing.clear();
+    setPlaybackState(false);
     renderEmptyPlot();
     updatePropsInspector();
     resetStats();
@@ -3523,7 +3573,12 @@ function loadPreset(name) {
     }
 
     invalidateNets();
-    runSimulation();
+    renderCanvas();
+    updateSimStatus('idle', 'Preset loaded');
+    const connStatus = document.getElementById('connectionStatus');
+    if (connStatus) {
+        connStatus.innerHTML = '<span class="w-2 h-2 rounded-full bg-cyan-400 inline-block"></span> Preset Loaded - Run to simulate';
+    }
 }
 
 setTimeout(() => {

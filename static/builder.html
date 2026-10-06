@@ -510,7 +510,7 @@
                     <div class="flex items-center gap-2 flex-wrap">
                         <!-- Numeric fine control -->
                         <div class="flex items-center gap-1 bg-slate-900/90 px-1.5 py-0.5 rounded border border-slate-800">
-                            <input type="number" id="transientDurationInput" min="5" max="2000" step="5" onchange="onTransientDurationInput(parseFloat(this.value))" class="w-16 bg-slate-900 border border-slate-700 text-cyan-300 rounded px-1.5 py-0.5 text-xs text-right font-mono" placeholder="ms">
+                            <input type="number" id="transientDurationInput" min="5" max="2000" step="5" oninput="onTransientDurationInput(this.value)" class="w-16 bg-slate-900 border border-slate-700 text-cyan-300 rounded px-1.5 py-0.5 text-xs text-right font-mono" placeholder="ms">
                             <span class="text-slate-400 text-[10px]">ms</span>
                         </div>
 
