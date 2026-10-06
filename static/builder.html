@@ -363,8 +363,30 @@
                     <span class="text-[10px] uppercase tracking-wider text-slate-400">Ripple Factor (RF)</span>
                     <span id="statRF" class="text-sm font-bold text-purple-400 font-mono">--</span>
                 </div>
-                <div class="ml-auto text-xs text-slate-400 flex items-center gap-2">
-                    <span id="simTimeLabel">Simulation Time: 40 ms</span>
+                <div class="ml-auto text-xs text-slate-400 flex items-center gap-3 shrink-0">
+                    <!-- Scrub Mode Indicator in Ribbon -->
+                    <div id="ribbonScrubIndicator" class="hidden items-center gap-1.5 px-2 py-0.5 rounded bg-amber-950/60 border border-amber-500/40 text-[11px] text-amber-300 font-mono">
+                        <i class="fa-solid fa-crosshairs text-amber-400"></i>
+                        <span id="ribbonScrubText">Scrubbed</span>
+                        <button onclick="resumeSweep()" class="ml-1 text-[10px] px-1.5 py-0.5 rounded bg-amber-600 hover:bg-amber-500 text-black font-bold">Resume</button>
+                    </div>
+
+                    <!-- Configurable Timescale Duration Selector -->
+                    <div class="flex items-center gap-1.5 bg-slate-950/80 px-2.5 py-1 rounded-lg border border-slate-800 text-xs text-slate-300">
+                        <label for="simCyclesSelect" class="text-[11px] text-slate-400 font-semibold flex items-center gap-1">
+                            <i class="fa-solid fa-clock-rotate-left text-cyan-400"></i> Duration:
+                        </label>
+                        <select id="simCyclesSelect" onchange="onSimCyclesChange(this.value)" class="bg-slate-900 border border-slate-700 text-cyan-300 text-xs rounded px-2 py-0.5 focus:outline-none focus:border-cyan-500 font-mono cursor-pointer">
+                            <option value="2">2 Cycles (Startup, ~40 ms)</option>
+                            <option value="5">5 Cycles (Fast, ~100 ms)</option>
+                            <option value="10" selected>10 Cycles (Settled, ~200 ms)</option>
+                            <option value="20">20 Cycles (Deep Settling, ~400 ms)</option>
+                            <option value="50">50 Cycles (Long Transient, ~1 s)</option>
+                            <option id="optCustomCycles" value="custom">Custom ms (prompt/input)</option>
+                        </select>
+                    </div>
+
+                    <span id="simTimeLabel" class="font-mono text-cyan-400/90 whitespace-nowrap">Simulation Time: 200 ms (10 Cycles)</span>
                 </div>
             </div>
         </div>
@@ -390,10 +412,25 @@
             <!-- Waveform & Channel Selector (Expanded Bottom half) -->
             <div class="flex-1 flex flex-col overflow-hidden">
                 <div class="px-3 py-1.5 bg-slate-900 border-b border-slate-800 flex items-center justify-between">
-                    <span class="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                        <i class="fa-solid fa-chart-line text-emerald-400"></i> Oscilloscope Waveforms
-                    </span>
                     <div class="flex items-center gap-2">
+                        <span class="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                            <i class="fa-solid fa-chart-line text-emerald-400"></i> Oscilloscope Waveforms
+                        </span>
+                        <!-- Segmented Pill Toggle: Steady-State vs Full Transient -->
+                        <div class="inline-flex p-0.5 bg-slate-950/90 rounded-lg border border-slate-800 ml-1">
+                            <button id="btnViewSteady" onclick="setGraphViewMode('steady')" class="px-2 py-0.5 rounded text-[11px] font-semibold bg-cyan-600/30 text-cyan-300 border border-cyan-500/50 shadow-sm shadow-cyan-500/20 transition flex items-center gap-1" title="View Single Steady-State Cycle">
+                                <span>⚡ Steady State (1 Cycle)</span>
+                            </button>
+                            <button id="btnViewTransient" onclick="setGraphViewMode('transient')" class="px-2 py-0.5 rounded text-[11px] text-slate-400 hover:text-slate-200 border border-transparent transition flex items-center gap-1" title="View Full Transient Timeline">
+                                <span>📈 Full Transient</span>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <!-- Resume Sweep button (visible during scrub inspection) -->
+                        <button id="btnResumeSweep" onclick="resumeSweep()" class="hidden px-2 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-[11px] font-semibold transition flex items-center gap-1 shadow-sm shadow-amber-500/20" title="Exit scrubbed inspection and resume sweep loop">
+                            <i class="fa-solid fa-rotate-right text-[10px]"></i> Resume Sweep
+                        </button>
                         <button onclick="toggleExpandGraph()" id="expandGraphBtn" class="text-[11px] px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition flex items-center gap-1" title="Toggle Expanded Graph Width">
                             <i id="expandGraphIcon" class="fa-solid fa-up-right-and-down-left-from-center text-[10px] text-cyan-400"></i>
                             <span id="expandGraphLabel">Expand</span>

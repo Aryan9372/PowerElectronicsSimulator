@@ -99,34 +99,115 @@ def simulate(req: SimulationRequest):
 class CustomSimulationRequest(BaseModel):
     circuit_json: dict
 
+def compute_circuit_stats(nodes, branch_i, branch_v, branch_p, idx=slice(None)):
+    stats = {}
+    
+    # Node statistics
+    for node, v_arr in nodes.items():
+        if len(v_arr) > 0:
+            v_sub = v_arr[idx]
+            if len(v_sub) == 0:
+                v_sub = v_arr
+            v_avg = float(np.mean(v_sub))
+            v_rms = float(np.sqrt(np.mean(v_sub**2)))
+            v_rf = float(np.sqrt(max(0.0, (v_rms / abs(v_avg))**2 - 1.0))) if abs(v_avg) > 1e-6 else 0.0
+            stats[f"V({node})"] = {
+                "avg": round(v_avg, 2),
+                "rms": round(v_rms, 2),
+                "pk_pk": round(float(np.ptp(v_sub)), 2),
+                "max": round(float(np.max(v_sub)), 2),
+                "min": round(float(np.min(v_sub)), 2),
+                "rf": round(v_rf, 3)
+            }
+            
+    # Branch statistics
+    for comp_name, i_arr in branch_i.items():
+        v_arr = branch_v.get(comp_name, np.zeros_like(i_arr))
+        p_arr = branch_p.get(comp_name, np.zeros_like(i_arr))
+        if len(i_arr) > 0:
+            i_sub = i_arr[idx]
+            p_sub = p_arr[idx]
+            if len(i_sub) == 0:
+                i_sub = i_arr
+                p_sub = p_arr
+            i_avg = float(np.mean(i_sub))
+            i_rms = float(np.sqrt(np.mean(i_sub**2)))
+            i_rf = float(np.sqrt(max(0.0, (i_rms / abs(i_avg))**2 - 1.0))) if abs(i_avg) > 1e-6 else 0.0
+            p_avg = float(np.mean(p_sub))
+            stats[f"I({comp_name})"] = {
+                "avg": round(i_avg, 3),
+                "rms": round(i_rms, 3),
+                "pk_pk": round(float(np.ptp(i_sub)), 3),
+                "max": round(float(np.max(i_sub)), 3),
+                "min": round(float(np.min(i_sub)), 3),
+                "p_avg": round(p_avg, 2),
+                "power": round(p_avg, 2),
+                "rf": round(i_rf, 3)
+            }
+
+    return stats
+
 @app.post("/api/simulate_custom")
 def simulate_custom(req: CustomSimulationRequest):
     try:
         sim, sim_params = build_from_json(req.circuit_json)
         
-        t_end = sim_params.get('t_end', 0.04)
-        dt = sim_params.get('dt', 1e-5)
+        t_end = float(sim_params.get('t_end', 0.04))
+        dt = float(sim_params.get('dt', 1e-5))
         
-        # Need a way to pass gate signals if any thyristors are present.
-        # For a generic circuit maker, we might need a generic control block.
-        # For now, let's auto-fire thyristors like diodes just to test, or pass no signals (they stay off unless gated).
-        # We can define a generic pulse generator in the JSON.
         gate_signals_map = req.circuit_json.get("control", {})
+
+        # Identify fundamental frequency freq
+        freq = None
+        if "freq" in sim_params and sim_params["freq"] is not None:
+            try:
+                freq = float(sim_params["freq"])
+            except (ValueError, TypeError):
+                pass
+                
+        if not freq or freq <= 0:
+            for comp in req.circuit_json.get("components", []):
+                if comp.get("type") == "V_AC" and "freq" in comp:
+                    try:
+                        f_candidate = float(comp["freq"])
+                        if f_candidate > 0:
+                            freq = f_candidate
+                            break
+                    except (ValueError, TypeError):
+                        pass
+                        
+        if not freq or freq <= 0:
+            for ctrl in gate_signals_map.values():
+                if "freq" in ctrl:
+                    try:
+                        f_candidate = float(ctrl["freq"])
+                        if f_candidate > 0:
+                            freq = f_candidate
+                            break
+                    except (ValueError, TypeError):
+                        pass
+                        
+        if not freq or freq <= 0:
+            freq = 50.0
+
+        T_cycle = 1.0 / freq
+        t_steady_start = max(0.0, t_end - T_cycle)
+        t_steady_end = t_end
         
         def gate_func(t):
             signals = {}
             for comp_id, ctrl in gate_signals_map.items():
                 ctype = ctrl.get('type', 'pulse')
-                freq = max(ctrl.get('freq', 50.0), 1e-3)
-                period = 1.0 / freq
+                c_freq = max(ctrl.get('freq', 50.0), 1e-3)
+                period = 1.0 / c_freq
                 
                 if ctype == 'pulse':
                     delay_angle = ctrl.get('delay_angle', 0.0)
                     pulse_width = ctrl.get('width', 15.0) # degrees
                     
-                    omega = 2 * math.pi * freq
-                    t_cycle = t % period
-                    angle = (omega * t_cycle * 180.0 / math.pi) % 360.0
+                    omega = 2 * math.pi * c_freq
+                    t_c = t % period
+                    angle = (omega * t_c * 180.0 / math.pi) % 360.0
                     
                     end_angle = (delay_angle + pulse_width) % 360.0
                     if delay_angle + pulse_width <= 360.0:
@@ -138,9 +219,9 @@ def simulate_custom(req: CustomSimulationRequest):
                     duty = ctrl.get('duty', 50.0) # 0 to 100%
                     phase = ctrl.get('phase', 0.0) # degrees
                     t_offset = (phase / 360.0) * period
-                    t_cycle = (t + t_offset) % period
+                    t_c = (t + t_offset) % period
                     on_time = (duty / 100.0) * period
-                    signals[comp_id] = (t_cycle <= on_time)
+                    signals[comp_id] = (t_c <= on_time)
                     
                 elif ctype == 'constant':
                     signals[comp_id] = bool(ctrl.get('state', True))
@@ -151,40 +232,15 @@ def simulate_custom(req: CustomSimulationRequest):
         results = sim.run(t_end=t_end, dt=dt, get_gate_signals=gate_func)
         
         # Calculate summary statistics
-        stats = {}
         time_arr = results['time']
         
-        # Node statistics
-        for node, v_arr in results['nodes'].items():
-            if len(v_arr) > 0:
-                v_avg = float(np.mean(v_arr))
-                v_rms = float(np.sqrt(np.mean(v_arr**2)))
-                v_rf = float(np.sqrt(max(0.0, (v_rms / abs(v_avg))**2 - 1.0))) if abs(v_avg) > 1e-6 else 0.0
-                stats[f"V({node})"] = {
-                    "avg": round(v_avg, 2),
-                    "rms": round(v_rms, 2),
-                    "pk_pk": round(float(np.ptp(v_arr)), 2),
-                    "max": round(float(np.max(v_arr)), 2),
-                    "min": round(float(np.min(v_arr)), 2),
-                    "rf": round(v_rf, 3)
-                }
-                
-        # Branch statistics
-        for comp_name, i_arr in results['branch_i'].items():
-            v_arr = results['branch_v'].get(comp_name, np.zeros_like(i_arr))
-            p_arr = results['branch_p'].get(comp_name, np.zeros_like(i_arr))
-            if len(i_arr) > 0:
-                i_avg = float(np.mean(i_arr))
-                i_rms = float(np.sqrt(np.mean(i_arr**2)))
-                i_rf = float(np.sqrt(max(0.0, (i_rms / abs(i_avg))**2 - 1.0))) if abs(i_avg) > 1e-6 else 0.0
-                stats[f"I({comp_name})"] = {
-                    "avg": round(i_avg, 3),
-                    "rms": round(i_rms, 3),
-                    "max": round(float(np.max(i_arr)), 3),
-                    "min": round(float(np.min(i_arr)), 3),
-                    "p_avg": round(float(np.mean(p_arr)), 2),
-                    "rf": round(i_rf, 3)
-                }
+        # Determine steady-state slice indices
+        idx_steady = np.where(time_arr >= (t_steady_start - 1e-9))[0]
+        if len(idx_steady) == 0:
+            idx_steady = slice(None)
+            
+        stats_steady = compute_circuit_stats(results['nodes'], results['branch_i'], results['branch_v'], results['branch_p'], idx_steady)
+        stats_transient = compute_circuit_stats(results['nodes'], results['branch_i'], results['branch_v'], results['branch_p'], slice(None))
 
         json_results = {
             "time": time_arr.tolist(),
@@ -193,7 +249,14 @@ def simulate_custom(req: CustomSimulationRequest):
             "branch_v": {k: v.tolist() for k, v in results['branch_v'].items()},
             "branch_p": {k: v.tolist() for k, v in results['branch_p'].items()},
             "switches": {k: v.tolist() for k, v in results.get('switches', {}).items()},
-            "stats": stats
+            "steady_window": {
+                "t_start": float(t_steady_start),
+                "t_end": float(t_steady_end),
+                "cycle_period": float(T_cycle)
+            },
+            "stats_steady": stats_steady,
+            "stats_transient": stats_transient,
+            "stats": stats_steady
         }
         
         return json_results

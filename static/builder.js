@@ -50,6 +50,15 @@ let isSimulating = false;
 let hasPendingSimulateRequest = false;
 let simCyclePeriod = 0.02; // Cycle period for scrubbing / oscilloscope sync
 
+// Dual-Mode Oscilloscope & Timescale State
+let graphViewMode = 'steady'; // 'steady' or 'transient'
+let simCycles = 10;
+let scrubbedTimeMs = null;
+let customSimTimeMs = null;
+let lastCursorX = -1;
+let lastCursorHeadY = -1;
+let plotInteractionsSetup = false;
+
 // Initialize Canvas Sizing
 function resizeCanvas() {
     if (!container) return;
@@ -297,7 +306,7 @@ function animateLoop(timestamp) {
     const dt = Math.min((timestamp - lastFrameTime) / 1000.0, 0.1); // clamp dt to avoid huge jumps
     lastFrameTime = timestamp;
 
-    if (isPlaying) {
+    if (isPlaying && scrubbedTimeMs === null) {
         // Human-visible AC cycle: 1 full 360° cycle takes 4 seconds at 1x speed (90°/sec)
         const angleSpeedDegPerSec = 90.0 * simSpeed;
         currentCycleAngleDeg = (currentCycleAngleDeg + angleSpeedDegPerSec * dt) % 360.0;
@@ -314,7 +323,9 @@ function animateLoop(timestamp) {
     // Throttle DOM text updates to 10 FPS to eliminate layout thrashing
     if (timestamp - lastDomUpdateTime > 100) {
         lastDomUpdateTime = timestamp;
-        updateAngleDisplay(currentCycleAngleDeg);
+        if (scrubbedTimeMs === null) {
+            updateAngleDisplay(currentCycleAngleDeg);
+        }
     }
 
     requestAnimationFrame(animateLoop);
@@ -322,7 +333,7 @@ function animateLoop(timestamp) {
 requestAnimationFrame(animateLoop);
 
 // -------------------------------------------------------------
-// Real-Time Oscilloscope Sweep Line Overlay (60 FPS)
+// Real-Time Oscilloscope Sweep Line Overlay (60 FPS, Option C Cursor)
 // -------------------------------------------------------------
 function renderPlotCursor() {
     const cCanvas = document.getElementById('plotCursorCanvas');
@@ -332,6 +343,8 @@ function renderPlotCursor() {
 
     if (!lastSimResults || !lastSimResults.time || lastSimResults.time.length === 0) {
         cctx.clearRect(0, 0, cCanvas.width, cCanvas.height);
+        lastCursorX = -1;
+        lastCursorHeadY = -1;
         return;
     }
 
@@ -353,10 +366,10 @@ function renderPlotCursor() {
     cctx.clearRect(0, 0, cCanvas.width, cCanvas.height);
     cctx.scale(dpr, dpr);
 
-    // Margins match Plotly layout: margin: { l: 45, r: 45, t: 15, b: 35 }
+    // Margins match Plotly layout: margin: { l: 45, r: 45, t: 20, b: 35 }
     let leftMargin = 45;
     let rightMargin = 45;
-    let topMargin = 15;
+    let topMargin = 20;
     let bottomMargin = 35;
     let plotW = Math.max(10, cw - leftMargin - rightMargin);
     let plotH = Math.max(10, ch - topMargin - bottomMargin);
@@ -373,49 +386,256 @@ function renderPlotCursor() {
     const times = lastSimResults.time;
     const totalSimTime = times[times.length - 1];
     if (totalSimTime <= 0) return;
+    const total_t_ms = totalSimTime * 1000.0;
 
-    const fraction = (currentCycleAngleDeg / 360.0);
-    const targetTime = fraction * totalSimTime;
+    let t_start_ms, t_end_ms;
+    if (lastSimResults.steady_window && typeof lastSimResults.steady_window.t_start === 'number') {
+        t_start_ms = lastSimResults.steady_window.t_start * 1000.0;
+        t_end_ms = lastSimResults.steady_window.t_end * 1000.0;
+    } else {
+        const cycleMs = (simCyclePeriod || 0.02) * 1000.0;
+        t_end_ms = total_t_ms;
+        t_start_ms = Math.max(0, t_end_ms - cycleMs);
+    }
+
+    let view_t0 = 0;
+    let view_t1 = total_t_ms;
+    if (graphViewMode === 'steady') {
+        view_t0 = t_start_ms;
+        view_t1 = t_end_ms;
+    } else {
+        view_t0 = 0;
+        view_t1 = total_t_ms;
+    }
+
+    if (plotEl && plotEl._fullLayout && plotEl._fullLayout.xaxis && plotEl._fullLayout.xaxis.range) {
+        const r = plotEl._fullLayout.xaxis.range;
+        if (r && r.length === 2 && !isNaN(r[0]) && !isNaN(r[1]) && r[1] > r[0]) {
+            view_t0 = r[0];
+            view_t1 = r[1];
+        }
+    }
+
+    const isScrubbed = (scrubbedTimeMs !== null);
+    let targetTimeMs = 0;
+    if (isScrubbed) {
+        targetTimeMs = scrubbedTimeMs;
+    } else {
+        const cycleSpanMs = Math.max(1e-4, t_end_ms - t_start_ms);
+        targetTimeMs = t_start_ms + (currentCycleAngleDeg / 360.0) * cycleSpanMs;
+    }
+
+    const fraction = (targetTimeMs - view_t0) / Math.max(1e-6, view_t1 - view_t0);
     const cursorX = leftMargin + fraction * plotW;
 
+    // Track cursor coordinates for hit testing
+    lastCursorX = cursorX;
+    lastCursorHeadY = topMargin;
+
+    if (cursorX < leftMargin - 10 || cursorX > leftMargin + plotW + 10) {
+        return; // Outside visible viewport
+    }
+
     cctx.save();
-    // 1. Neon Glowing Oscilloscope Sweep Line
-    cctx.strokeStyle = '#38bdf8';
-    cctx.lineWidth = 2;
-    cctx.setLineDash([5, 3]);
-    cctx.beginPath();
-    cctx.moveTo(cursorX, topMargin);
-    cctx.lineTo(cursorX, topMargin + plotH);
-    cctx.stroke();
-    cctx.setLineDash([]);
 
-    // 2. Glowing phosphor beam bead at cursor head
-    cctx.fillStyle = '#0284c7';
-    cctx.beginPath();
-    cctx.arc(cursorX, topMargin, 4.5, 0, Math.PI * 2);
-    cctx.fill();
-    cctx.fillStyle = '#38bdf8';
-    cctx.beginPath();
-    cctx.arc(cursorX, topMargin, 2.5, 0, Math.PI * 2);
-    cctx.fill();
+    if (isScrubbed) {
+        // Option C Scrubbed Mode: Glowing Amber cursor line
+        cctx.strokeStyle = '#f59e0b';
+        cctx.lineWidth = 2.5;
+        cctx.setLineDash([4, 2]);
+        cctx.beginPath();
+        cctx.moveTo(cursorX, topMargin);
+        cctx.lineTo(cursorX, topMargin + plotH);
+        cctx.stroke();
+        cctx.setLineDash([]);
 
-    // 3. Compact Floating Timestamp Badge
-    cctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
-    cctx.strokeStyle = '#0284c7';
-    cctx.lineWidth = 1;
-    const tMsText = `${(targetTime * 1000.0).toFixed(2)} ms`;
-    cctx.font = 'bold 9px monospace';
-    const textW = cctx.measureText(tMsText).width;
-    const badgeX = Math.max(leftMargin, Math.min(leftMargin + plotW - textW - 8, cursorX - (textW + 8) / 2));
-    cctx.beginPath();
-    cctx.roundRect(badgeX, topMargin + 4, textW + 8, 14, 3);
-    cctx.fill();
-    cctx.stroke();
+        // Glow halo
+        cctx.strokeStyle = 'rgba(245, 158, 11, 0.35)';
+        cctx.lineWidth = 6;
+        cctx.beginPath();
+        cctx.moveTo(cursorX, topMargin);
+        cctx.lineTo(cursorX, topMargin + plotH);
+        cctx.stroke();
 
-    cctx.fillStyle = '#38bdf8';
-    cctx.fillText(tMsText, badgeX + 4, topMargin + 14);
+        // Cursor head bead (interactive)
+        cctx.fillStyle = '#b45309';
+        cctx.beginPath();
+        cctx.arc(cursorX, topMargin, 6, 0, Math.PI * 2);
+        cctx.fill();
+        cctx.fillStyle = '#fbbf24';
+        cctx.beginPath();
+        cctx.arc(cursorX, topMargin, 3.5, 0, Math.PI * 2);
+        cctx.fill();
+
+        // Badge: Scrub: ${scrubbedTimeMs.toFixed(2)} ms (Click to resume loop)
+        const badgeText = `Scrub: ${targetTimeMs.toFixed(2)} ms (Click to resume loop)`;
+        cctx.font = 'bold 9.5px monospace';
+        const textW = cctx.measureText(badgeText).width;
+        const badgeW = textW + 14;
+        const badgeX = Math.max(leftMargin, Math.min(leftMargin + plotW - badgeW, cursorX - badgeW / 2));
+
+        cctx.fillStyle = 'rgba(24, 18, 10, 0.95)';
+        cctx.strokeStyle = '#f59e0b';
+        cctx.lineWidth = 1.5;
+        cctx.beginPath();
+        cctx.roundRect(badgeX, topMargin + 4, badgeW, 17, 4);
+        cctx.fill();
+        cctx.stroke();
+
+        cctx.fillStyle = '#fbbf24';
+        cctx.fillText(badgeText, badgeX + 7, topMargin + 16);
+
+    } else {
+        // Normal Loop Mode: Neon cyan sweep cursor
+        cctx.strokeStyle = '#38bdf8';
+        cctx.lineWidth = 2;
+        cctx.setLineDash([5, 3]);
+        cctx.beginPath();
+        cctx.moveTo(cursorX, topMargin);
+        cctx.lineTo(cursorX, topMargin + plotH);
+        cctx.stroke();
+        cctx.setLineDash([]);
+
+        // Glow halo
+        cctx.strokeStyle = 'rgba(56, 189, 248, 0.25)';
+        cctx.lineWidth = 5;
+        cctx.beginPath();
+        cctx.moveTo(cursorX, topMargin);
+        cctx.lineTo(cursorX, topMargin + plotH);
+        cctx.stroke();
+
+        // Phosphor beam bead at cursor head
+        cctx.fillStyle = '#0284c7';
+        cctx.beginPath();
+        cctx.arc(cursorX, topMargin, 5, 0, Math.PI * 2);
+        cctx.fill();
+        cctx.fillStyle = '#38bdf8';
+        cctx.beginPath();
+        cctx.arc(cursorX, topMargin, 2.5, 0, Math.PI * 2);
+        cctx.fill();
+
+        // Glowing badge showing current angle/ms
+        const badgeText = `${targetTimeMs.toFixed(2)} ms (${currentCycleAngleDeg.toFixed(0)}°)`;
+        cctx.font = 'bold 9px monospace';
+        const textW = cctx.measureText(badgeText).width;
+        const badgeW = textW + 10;
+        const badgeX = Math.max(leftMargin, Math.min(leftMargin + plotW - badgeW, cursorX - badgeW / 2));
+
+        cctx.fillStyle = 'rgba(15, 23, 42, 0.92)';
+        cctx.strokeStyle = '#0284c7';
+        cctx.lineWidth = 1;
+        cctx.beginPath();
+        cctx.roundRect(badgeX, topMargin + 4, badgeW, 15, 3);
+        cctx.fill();
+        cctx.stroke();
+
+        cctx.fillStyle = '#38bdf8';
+        cctx.fillText(badgeText, badgeX + 5, topMargin + 15);
+    }
 
     cctx.restore();
+}
+
+// -------------------------------------------------------------
+// Dual-Mode Oscilloscope & Scrubbing View Controls
+// -------------------------------------------------------------
+function setGraphViewMode(mode) {
+    if (graphViewMode === mode) return;
+    graphViewMode = mode;
+    updateViewModeButtons();
+    updatePlot();
+    if (lastSimResults) {
+        updateStatsDashboard(lastSimResults);
+    }
+}
+
+function updateViewModeButtons() {
+    const btnSteady = document.getElementById('btnViewSteady');
+    const btnTransient = document.getElementById('btnViewTransient');
+    if (!btnSteady || !btnTransient) return;
+
+    if (graphViewMode === 'steady') {
+        btnSteady.className = 'px-2 py-0.5 rounded text-[11px] font-semibold bg-cyan-600/30 text-cyan-300 border border-cyan-500/50 shadow-sm shadow-cyan-500/20 transition flex items-center gap-1';
+        btnTransient.className = 'px-2 py-0.5 rounded text-[11px] text-slate-400 hover:text-slate-200 border border-transparent transition flex items-center gap-1';
+    } else {
+        btnSteady.className = 'px-2 py-0.5 rounded text-[11px] text-slate-400 hover:text-slate-200 border border-transparent transition flex items-center gap-1';
+        btnTransient.className = 'px-2 py-0.5 rounded text-[11px] font-semibold bg-cyan-600/30 text-cyan-300 border border-cyan-500/50 shadow-sm shadow-cyan-500/20 transition flex items-center gap-1';
+    }
+}
+
+function onPlotScrub(timeMs) {
+    if (!lastSimResults) return;
+    scrubbedTimeMs = Math.max(0, timeMs);
+
+    const btnResume = document.getElementById('btnResumeSweep');
+    if (btnResume) btnResume.classList.remove('hidden');
+
+    const ribbonScrub = document.getElementById('ribbonScrubIndicator');
+    if (ribbonScrub) {
+        ribbonScrub.classList.remove('hidden');
+        ribbonScrub.classList.add('flex');
+        const ribbonText = document.getElementById('ribbonScrubText');
+        if (ribbonText) ribbonText.innerText = `Scrub: ${scrubbedTimeMs.toFixed(1)} ms`;
+    }
+
+    // Sync angle display and slider to corresponding cycle angle
+    const times = lastSimResults.time;
+    const totalSimTime = times[times.length - 1];
+    let t_start = 0, t_end = totalSimTime;
+    if (lastSimResults.steady_window && typeof lastSimResults.steady_window.t_start === 'number') {
+        t_start = lastSimResults.steady_window.t_start;
+        t_end = lastSimResults.steady_window.t_end;
+    } else {
+        t_start = Math.max(0, totalSimTime - simCyclePeriod);
+        t_end = totalSimTime;
+    }
+    const cyclePeriod = Math.max(1e-6, t_end - t_start);
+    const scrubSec = scrubbedTimeMs / 1000.0;
+    const relSec = ((scrubSec - t_start) % cyclePeriod + cyclePeriod) % cyclePeriod;
+    currentCycleAngleDeg = (relSec / cyclePeriod) * 360.0;
+    updateAngleDisplay(currentCycleAngleDeg);
+
+    // Update schematic animation instantly
+    renderCanvas();
+    renderPlotCursor();
+}
+
+function resumeSweep() {
+    scrubbedTimeMs = null;
+    const btnResume = document.getElementById('btnResumeSweep');
+    if (btnResume) btnResume.classList.add('hidden');
+
+    const ribbonScrub = document.getElementById('ribbonScrubIndicator');
+    if (ribbonScrub) {
+        ribbonScrub.classList.add('hidden');
+        ribbonScrub.classList.remove('flex');
+    }
+
+    renderCanvas();
+    renderPlotCursor();
+}
+
+function onSimCyclesChange(val) {
+    if (val === 'custom') {
+        const currentMs = (customSimTimeMs || (simCycles * (simCyclePeriod || 0.02) * 1000)).toFixed(0);
+        const promptVal = prompt('Enter custom simulation duration in milliseconds (ms):', currentMs);
+        const parsed = parseFloat(promptVal);
+        if (!isNaN(parsed) && parsed > 0) {
+            customSimTimeMs = parsed;
+            simCycles = Math.max(1, Math.round(parsed / ((simCyclePeriod || 0.02) * 1000)));
+            const customOpt = document.getElementById('optCustomCycles');
+            if (customOpt) customOpt.text = `Custom (${parsed.toFixed(0)} ms)`;
+        } else {
+            document.getElementById('simCyclesSelect').value = String(simCycles);
+            return;
+        }
+    } else {
+        customSimTimeMs = null;
+        simCycles = parseInt(val, 10) || 10;
+        const customOpt = document.getElementById('optCustomCycles');
+        if (customOpt) customOpt.text = 'Custom ms (prompt/input)';
+    }
+    runSimulation(true);
 }
 
 // -------------------------------------------------------------
@@ -447,16 +667,25 @@ function toggleExpandGraph() {
 }
 
 function onAngleSliderInput(angleDeg) {
+    if (scrubbedTimeMs !== null) {
+        resumeSweep();
+    }
     currentCycleAngleDeg = Math.max(0, Math.min(360, angleDeg));
     updateAngleDisplay(currentCycleAngleDeg);
 }
 
 function stepAnimation(direction) {
+    if (scrubbedTimeMs !== null) {
+        resumeSweep();
+    }
     currentCycleAngleDeg = (currentCycleAngleDeg + direction * 5.0 + 360.0) % 360.0;
     updateAngleDisplay(currentCycleAngleDeg);
 }
 
 function resetAnimation() {
+    if (scrubbedTimeMs !== null) {
+        resumeSweep();
+    }
     currentCycleAngleDeg = 0.0;
     updateAngleDisplay(0.0);
 }
@@ -582,9 +811,41 @@ function getSimulationStepIndex() {
     const times = lastSimResults.time;
     const totalSimTime = times[times.length - 1];
     if (totalSimTime <= 0) return 0;
-    const fraction = (currentCycleAngleDeg / 360.0);
-    const idx = Math.min(times.length - 1, Math.max(0, Math.floor(fraction * (times.length - 1))));
-    return idx;
+
+    let targetTimeSec = 0;
+    if (scrubbedTimeMs !== null) {
+        targetTimeSec = scrubbedTimeMs / 1000.0;
+    } else {
+        let t_start = 0;
+        let t_end = totalSimTime;
+        if (lastSimResults.steady_window && typeof lastSimResults.steady_window.t_start === 'number') {
+            t_start = lastSimResults.steady_window.t_start;
+            t_end = lastSimResults.steady_window.t_end;
+        } else {
+            t_start = Math.max(0, totalSimTime - simCyclePeriod);
+            t_end = totalSimTime;
+        }
+        const cyclePeriod = Math.max(1e-6, t_end - t_start);
+        targetTimeSec = t_start + (currentCycleAngleDeg / 360.0) * cyclePeriod;
+    }
+
+    targetTimeSec = Math.max(times[0], Math.min(times[times.length - 1], targetTimeSec));
+
+    // Fast binary search for closest time in array
+    let low = 0, high = times.length - 1;
+    while (low <= high) {
+        const mid = (low + high) >> 1;
+        if (times[mid] < targetTimeSec) {
+            low = mid + 1;
+        } else if (times[mid] > targetTimeSec) {
+            high = mid - 1;
+        } else {
+            return mid;
+        }
+    }
+    if (high < 0) return 0;
+    if (low >= times.length) return times.length - 1;
+    return (Math.abs(times[low] - targetTimeSec) < Math.abs(times[high] - targetTimeSec)) ? low : high;
 }
 
 function getComponentSwitchState(comp, stepIdx) {
@@ -1226,6 +1487,7 @@ function clearCircuit() {
     invalidateNets();
     updatePropsInspector();
     resetStats();
+    resumeSweep();
 
     // Completely purge and reset the Oscilloscope plot & channel checkboxes
     renderEmptyPlot();
@@ -1431,21 +1693,22 @@ async function runSimulation(isBackgroundAuto = false) {
         }
     });
 
+    simCyclePeriod = 1.0 / maxFreq;
+
     let t_end = 0.04;
-    let dt = 2e-5;
-    if (maxFreq >= 1000) {
-        // High frequency DC-DC converters / inverters: 20 cycles with 80 pts/cycle
-        t_end = Math.min(0.004, 20.0 / maxFreq);
-        dt = (1.0 / maxFreq) / 80.0;
-        simCyclePeriod = 1.0 / maxFreq;
+    if (customSimTimeMs !== null) {
+        t_end = customSimTimeMs / 1000.0;
     } else {
-        t_end = 0.04;
-        dt = 2e-5;
-        simCyclePeriod = 1.0 / maxFreq;
+        t_end = simCycles * (1.0 / maxFreq);
+    }
+
+    let dt = Math.max(1e-5, (1.0 / maxFreq) / 100.0);
+    if (maxFreq >= 1000 && dt > (1.0 / maxFreq) / 50.0) {
+        dt = Math.max(1e-6, (1.0 / maxFreq) / 80.0);
     }
 
     const circuitPayload = {
-        simulation: { t_end: t_end, dt: dt },
+        simulation: { t_end: t_end, dt: dt, cycle_count: simCycles },
         components: [],
         control: {}
     };
@@ -1567,6 +1830,11 @@ async function runSimulation(isBackgroundAuto = false) {
         updatePlot();
         updateStatsDashboard(data);
 
+        const simTimeLabel = document.getElementById('simTimeLabel');
+        if (simTimeLabel) {
+            simTimeLabel.innerText = `Simulation Time: ${(t_end * 1000).toFixed(1)} ms (${simCycles} Cycles)`;
+        }
+
         document.getElementById('connectionStatus').innerHTML = `
             <span class="w-2 h-2 rounded-full bg-emerald-400 inline-block animate-pulse"></span> Solved Live (${data.time.length} pts)
         `;
@@ -1661,6 +1929,18 @@ function updatePlot() {
     const { time, nodes, branch_i, switches } = lastSimResults;
 
     const fullTimeMs = time.map(t => t * 1000.0);
+    const total_t_ms = fullTimeMs[fullTimeMs.length - 1];
+
+    let t_start_ms, t_end_ms;
+    if (lastSimResults.steady_window && typeof lastSimResults.steady_window.t_start === 'number') {
+        t_start_ms = lastSimResults.steady_window.t_start * 1000.0;
+        t_end_ms = lastSimResults.steady_window.t_end * 1000.0;
+    } else {
+        const cycleMs = (simCyclePeriod || 0.02) * 1000.0;
+        t_end_ms = total_t_ms;
+        t_start_ms = Math.max(0, t_end_ms - cycleMs);
+    }
+
     const traces = [];
     const colorPalette = ['#06b6d4', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6', '#3b82f6', '#14b8a6', '#f97316'];
     let colorIdx = 0;
@@ -1707,6 +1987,39 @@ function updatePlot() {
         }
     });
 
+    let xAxisConfig = {};
+    let plotShapes = [];
+
+    if (graphViewMode === 'steady') {
+        xAxisConfig = {
+            title: 'Time (ms) [Steady-State Cycle]',
+            range: [t_start_ms, t_end_ms],
+            autorange: false,
+            gridcolor: '#1e293b',
+            zerolinecolor: '#334155'
+        };
+        plotShapes = [];
+    } else {
+        xAxisConfig = {
+            title: 'Time (ms) [Full Transient Timeline]',
+            range: [0, total_t_ms],
+            autorange: false,
+            gridcolor: '#1e293b',
+            zerolinecolor: '#334155'
+        };
+        plotShapes = [{
+            type: 'rect',
+            xref: 'x',
+            yref: 'paper',
+            x0: t_start_ms,
+            x1: t_end_ms,
+            y0: 0,
+            y1: 1,
+            fillcolor: 'rgba(6, 182, 212, 0.12)',
+            line: { color: '#06b6d4', width: 1, dash: 'dot' }
+        }];
+    }
+
     const layout = {
         paper_bgcolor: 'rgba(0,0,0,0)',
         plot_bgcolor: '#070a13',
@@ -1714,11 +2027,8 @@ function updatePlot() {
         font: { color: '#94a3b8', size: 10 },
         margin: { l: 45, r: 45, t: 20, b: 35 },
         hovermode: 'x unified',
-        xaxis: {
-            title: 'Time (ms)',
-            gridcolor: '#1e293b',
-            zerolinecolor: '#334155'
-        },
+        xaxis: xAxisConfig,
+        shapes: plotShapes,
         yaxis: {
             title: 'Voltage (V)',
             gridcolor: '#1e293b',
@@ -1747,27 +2057,93 @@ function updatePlot() {
         }
     };
 
-    Plotly.react('plot', traces, layout, { responsive: true, displayModeBar: false });
+    Plotly.react('plot', traces, layout, { responsive: true, displayModeBar: false }).then(() => {
+        setupPlotInteractions();
+    });
+}
+
+function setupPlotInteractions() {
+    const plotEl = document.getElementById('plot');
+    if (!plotEl || plotInteractionsSetup) return;
+    plotInteractionsSetup = true;
+
+    if (plotEl.on) {
+        plotEl.on('plotly_click', function(data) {
+            if (data && data.points && data.points.length > 0) {
+                onPlotScrub(data.points[0].x);
+            }
+        });
+    }
+
+    plotEl.addEventListener('click', function(e) {
+        if (!lastSimResults) return;
+        const rect = plotEl.getBoundingClientRect();
+        const clickX = e.clientX - rect.left;
+        const clickY = e.clientY - rect.top;
+
+        // If clicked on/near cursor head while scrubbed, resume continuous sweep
+        if (scrubbedTimeMs !== null && lastCursorX >= 0) {
+            const dist = Math.hypot(clickX - lastCursorX, clickY - lastCursorHeadY);
+            if (dist < 22) {
+                resumeSweep();
+                return;
+            }
+        }
+
+        // Convert clickX to ms from Plotly layout size & range
+        if (plotEl._fullLayout && plotEl._fullLayout.xaxis && plotEl._fullLayout._size) {
+            const sz = plotEl._fullLayout._size;
+            if (clickX >= sz.l && clickX <= sz.l + sz.w && clickY >= sz.t && clickY <= sz.t + sz.h) {
+                const fraction = (clickX - sz.l) / sz.w;
+                const xRange = plotEl._fullLayout.xaxis.range;
+                if (xRange && xRange.length >= 2) {
+                    const clickedMs = xRange[0] + fraction * (xRange[1] - xRange[0]);
+                    onPlotScrub(clickedMs);
+                }
+            }
+        }
+    });
+
+    plotEl.addEventListener('mousemove', function(e) {
+        if (scrubbedTimeMs !== null && lastCursorX >= 0) {
+            const rect = plotEl.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+            if (Math.hypot(mouseX - lastCursorX, mouseY - lastCursorHeadY) < 22) {
+                plotEl.style.cursor = 'pointer';
+                return;
+            }
+        }
+        plotEl.style.cursor = '';
+    });
 }
 
 function updateStatsDashboard(data) {
-    if (!data.stats) return;
+    if (!data) return;
+
+    let statsObj = null;
+    if (graphViewMode === 'steady') {
+        statsObj = data.stats_steady || computeSteadyStatsSlice(data) || data.stats;
+    } else {
+        statsObj = data.stats_transient || data.stats;
+    }
+    if (!statsObj) return;
 
     const rComp = components.find(c => c.type === 'Resistor');
     let avgV = 0, rmsV = 0, avgI = 0, rmsI = 0, power = 0, rf = 0;
 
     if (rComp) {
-        const iStats = data.stats[`I(${rComp.id})`];
+        const iStats = statsObj[`I(${rComp.id})`];
         if (iStats) {
             avgI = iStats.avg;
             rmsI = iStats.rms;
-            power = iStats.p_avg;
+            power = iStats.p_avg !== undefined ? iStats.p_avg : (iStats.power || 0);
         }
     }
 
     const nodeKeys = Object.keys(data.nodes).filter(n => n !== 'GND' && n !== 'gnd');
     if (nodeKeys.length > 0) {
-        const vStats = data.stats[`V(${nodeKeys[0]})`];
+        const vStats = statsObj[`V(${nodeKeys[0]})`];
         if (vStats) {
             avgV = vStats.avg;
             rmsV = vStats.rms;
@@ -1781,6 +2157,61 @@ function updateStatsDashboard(data) {
     document.getElementById('statRmsI').innerText = `${rmsI.toFixed(2)} A`;
     document.getElementById('statPower').innerText = `${Math.abs(power).toFixed(1)} W`;
     document.getElementById('statRF').innerText = `${rf.toFixed(3)}`;
+}
+
+function computeSteadyStatsSlice(data) {
+    if (!data.time || data.time.length === 0) return null;
+    const times = data.time;
+    const totalSimTime = times[times.length - 1];
+    let t_start = 0;
+    if (data.steady_window && typeof data.steady_window.t_start === 'number') {
+        t_start = data.steady_window.t_start;
+    } else {
+        t_start = Math.max(0, totalSimTime - simCyclePeriod);
+    }
+
+    let sIdx = 0;
+    let low = 0, high = times.length - 1;
+    while (low <= high) {
+        const mid = (low + high) >> 1;
+        if (times[mid] < t_start) low = mid + 1;
+        else { sIdx = mid; high = mid - 1; }
+    }
+    const count = times.length - sIdx;
+    if (count <= 1) return null;
+
+    const steadyStats = {};
+    if (data.nodes) {
+        for (const [node, arr] of Object.entries(data.nodes)) {
+            let sum = 0, sumSq = 0;
+            for (let i = sIdx; i < arr.length; i++) {
+                const v = arr[i];
+                sum += v;
+                sumSq += v * v;
+            }
+            const avg = sum / count;
+            const rms = Math.sqrt(sumSq / count);
+            const rf = Math.abs(avg) > 1e-6 ? Math.sqrt(Math.max(0, Math.pow(rms / Math.abs(avg), 2) - 1.0)) : 0;
+            steadyStats[`V(${node})`] = { avg, rms, rf };
+        }
+    }
+    if (data.branch_i) {
+        for (const [cid, arr] of Object.entries(data.branch_i)) {
+            let sum = 0, sumSq = 0, sumP = 0;
+            const vArr = (data.branch_v && data.branch_v[cid]) || null;
+            for (let i = sIdx; i < arr.length; i++) {
+                const cur = arr[i];
+                sum += cur;
+                sumSq += cur * cur;
+                if (vArr && vArr.length > i) sumP += cur * vArr[i];
+            }
+            const avg = sum / count;
+            const rms = Math.sqrt(sumSq / count);
+            const rf = Math.abs(avg) > 1e-6 ? Math.sqrt(Math.max(0, Math.pow(rms / Math.abs(avg), 2) - 1.0)) : 0;
+            steadyStats[`I(${cid})`] = { avg, rms, p_avg: sumP / count, rf };
+        }
+    }
+    return steadyStats;
 }
 
 function resetStats() {
@@ -1804,6 +2235,7 @@ function loadPreset(name) {
     renderEmptyPlot();
     updatePropsInspector();
     resetStats();
+    resumeSweep();
 
     // ---------------------------------------------------------
     // 1. Single-Phase Full-Bridge Thyristor Rectifier (Reference)
