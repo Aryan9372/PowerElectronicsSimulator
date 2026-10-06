@@ -47,6 +47,8 @@ let lastSimResults = null;
 let activeChannels = new Set();
 let autoSimDebounceTimer = null;
 let isSimulating = false;
+let hasPendingSimulateRequest = false;
+let simCyclePeriod = 0.02; // Cycle period for scrubbing / oscilloscope sync
 
 // Initialize Canvas Sizing
 function resizeCanvas() {
@@ -306,6 +308,9 @@ function animateLoop(timestamp) {
     // Render Canvas at 60 FPS
     renderCanvas();
 
+    // Render Real-Time Oscilloscope Sweep Cursor at 60 FPS
+    renderPlotCursor();
+
     // Throttle DOM text updates to 10 FPS to eliminate layout thrashing
     if (timestamp - lastDomUpdateTime > 100) {
         lastDomUpdateTime = timestamp;
@@ -315,6 +320,131 @@ function animateLoop(timestamp) {
     requestAnimationFrame(animateLoop);
 }
 requestAnimationFrame(animateLoop);
+
+// -------------------------------------------------------------
+// Real-Time Oscilloscope Sweep Line Overlay (60 FPS)
+// -------------------------------------------------------------
+function renderPlotCursor() {
+    const cCanvas = document.getElementById('plotCursorCanvas');
+    if (!cCanvas) return;
+    const cctx = cCanvas.getContext('2d');
+    if (!cctx) return;
+
+    if (!lastSimResults || !lastSimResults.time || lastSimResults.time.length === 0) {
+        cctx.clearRect(0, 0, cCanvas.width, cCanvas.height);
+        return;
+    }
+
+    const wrapper = document.getElementById('plotWrapper');
+    if (!wrapper) return;
+    const cw = wrapper.clientWidth;
+    const ch = wrapper.clientHeight;
+    if (cw <= 0 || ch <= 0) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    const targetW = Math.round(cw * dpr);
+    const targetH = Math.round(ch * dpr);
+    if (cCanvas.width !== targetW || cCanvas.height !== targetH) {
+        cCanvas.width = targetW;
+        cCanvas.height = targetH;
+    }
+
+    cctx.setTransform(1, 0, 0, 1, 0, 0);
+    cctx.clearRect(0, 0, cCanvas.width, cCanvas.height);
+    cctx.scale(dpr, dpr);
+
+    // Margins match Plotly layout: margin: { l: 45, r: 45, t: 15, b: 35 }
+    let leftMargin = 45;
+    let rightMargin = 45;
+    let topMargin = 15;
+    let bottomMargin = 35;
+    let plotW = Math.max(10, cw - leftMargin - rightMargin);
+    let plotH = Math.max(10, ch - topMargin - bottomMargin);
+
+    const plotEl = document.getElementById('plot');
+    if (plotEl && plotEl._fullLayout && plotEl._fullLayout._size) {
+        const sz = plotEl._fullLayout._size;
+        leftMargin = sz.l;
+        topMargin = sz.t;
+        plotW = sz.w;
+        plotH = sz.h;
+    }
+
+    const times = lastSimResults.time;
+    const totalSimTime = times[times.length - 1];
+    if (totalSimTime <= 0) return;
+
+    const fraction = (currentCycleAngleDeg / 360.0);
+    const targetTime = fraction * totalSimTime;
+    const cursorX = leftMargin + fraction * plotW;
+
+    cctx.save();
+    // 1. Neon Glowing Oscilloscope Sweep Line
+    cctx.strokeStyle = '#38bdf8';
+    cctx.lineWidth = 2;
+    cctx.setLineDash([5, 3]);
+    cctx.beginPath();
+    cctx.moveTo(cursorX, topMargin);
+    cctx.lineTo(cursorX, topMargin + plotH);
+    cctx.stroke();
+    cctx.setLineDash([]);
+
+    // 2. Glowing phosphor beam bead at cursor head
+    cctx.fillStyle = '#0284c7';
+    cctx.beginPath();
+    cctx.arc(cursorX, topMargin, 4.5, 0, Math.PI * 2);
+    cctx.fill();
+    cctx.fillStyle = '#38bdf8';
+    cctx.beginPath();
+    cctx.arc(cursorX, topMargin, 2.5, 0, Math.PI * 2);
+    cctx.fill();
+
+    // 3. Compact Floating Timestamp Badge
+    cctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
+    cctx.strokeStyle = '#0284c7';
+    cctx.lineWidth = 1;
+    const tMsText = `${(targetTime * 1000.0).toFixed(2)} ms`;
+    cctx.font = 'bold 9px monospace';
+    const textW = cctx.measureText(tMsText).width;
+    const badgeX = Math.max(leftMargin, Math.min(leftMargin + plotW - textW - 8, cursorX - (textW + 8) / 2));
+    cctx.beginPath();
+    cctx.roundRect(badgeX, topMargin + 4, textW + 8, 14, 3);
+    cctx.fill();
+    cctx.stroke();
+
+    cctx.fillStyle = '#38bdf8';
+    cctx.fillText(tMsText, badgeX + 4, topMargin + 14);
+
+    cctx.restore();
+}
+
+// -------------------------------------------------------------
+// Expand / Restore Oscilloscope Window
+// -------------------------------------------------------------
+let isGraphExpanded = false;
+function toggleExpandGraph() {
+    isGraphExpanded = !isGraphExpanded;
+    const panel = document.getElementById('rightPanel');
+    const label = document.getElementById('expandGraphLabel');
+    const icon = document.getElementById('expandGraphIcon');
+    if (!panel) return;
+
+    if (isGraphExpanded) {
+        panel.classList.remove('w-[480px]', 'lg:w-[520px]');
+        panel.classList.add('w-[720px]', 'lg:w-[780px]');
+        if (label) label.innerText = 'Restore';
+        if (icon) icon.className = 'fa-solid fa-down-left-and-up-right-to-center text-[10px] text-amber-400';
+    } else {
+        panel.classList.remove('w-[720px]', 'lg:w-[780px]');
+        panel.classList.add('w-[480px]', 'lg:w-[520px]');
+        if (label) label.innerText = 'Expand';
+        if (icon) icon.className = 'fa-solid fa-up-right-and-down-left-from-center text-[10px] text-cyan-400';
+    }
+
+    setTimeout(() => {
+        if (window.Plotly) Plotly.Plots.resize('plot');
+    }, 310);
+}
 
 function onAngleSliderInput(angleDeg) {
     currentCycleAngleDeg = Math.max(0, Math.min(360, angleDeg));
@@ -451,13 +581,9 @@ function getSimulationStepIndex() {
     if (!lastSimResults || !lastSimResults.time || lastSimResults.time.length === 0) return 0;
     const times = lastSimResults.time;
     const totalSimTime = times[times.length - 1];
-    const cycleDuration = Math.min(0.02, totalSimTime);
-    const startCycleTime = Math.max(0, totalSimTime - cycleDuration);
+    if (totalSimTime <= 0) return 0;
     const fraction = (currentCycleAngleDeg / 360.0);
-    const targetTime = startCycleTime + fraction * cycleDuration;
-    
-    const ratio = Math.max(0, Math.min(1, targetTime / totalSimTime));
-    const idx = Math.min(times.length - 1, Math.max(0, Math.floor(ratio * (times.length - 1))));
+    const idx = Math.min(times.length - 1, Math.max(0, Math.floor(fraction * (times.length - 1))));
     return idx;
 }
 
@@ -1100,6 +1226,41 @@ function clearCircuit() {
     invalidateNets();
     updatePropsInspector();
     resetStats();
+
+    // Completely purge and reset the Oscilloscope plot & channel checkboxes
+    renderEmptyPlot();
+    const chContainer = document.getElementById('channelCheckboxes');
+    if (chContainer) chContainer.innerHTML = '<span class="text-slate-500 italic text-xs">Circuit cleared (No channels)</span>';
+
+    const connStatus = document.getElementById('connectionStatus');
+    if (connStatus) connStatus.innerHTML = '<span class="w-2 h-2 rounded-full bg-slate-500 inline-block"></span> Schematic Empty';
+}
+
+function renderEmptyPlot() {
+    if (window.Plotly) {
+        Plotly.purge('plot');
+        const layout = {
+            paper_bgcolor: 'rgba(0,0,0,0)',
+            plot_bgcolor: '#070a13',
+            font: { color: '#64748b', size: 10 },
+            margin: { l: 45, r: 45, t: 15, b: 35 },
+            xaxis: { title: 'Time (ms)', gridcolor: '#1e293b', zerolinecolor: '#334155' },
+            yaxis: { title: 'Voltage (V)', gridcolor: '#1e293b', zerolinecolor: '#334155' },
+            annotations: [{
+                text: 'Oscilloscope Ready — Load a preset or build a circuit',
+                xref: 'paper', yref: 'paper',
+                x: 0.5, y: 0.5, showarrow: false,
+                font: { size: 12, color: '#475569' }
+            }]
+        };
+        Plotly.react('plot', [], layout, { responsive: true, displayModeBar: false });
+    }
+
+    const cCanvas = document.getElementById('plotCursorCanvas');
+    if (cCanvas) {
+        const cctx = cCanvas.getContext('2d');
+        if (cctx) cctx.clearRect(0, 0, cCanvas.width, cCanvas.height);
+    }
 }
 
 function resetZoom() {
@@ -1233,13 +1394,13 @@ function updateProp(key, value) {
 }
 
 // -------------------------------------------------------------
-// Live Auto-Simulation (Debounced 60ms)
+// Live Auto-Simulation (Ultra-Fast 25ms Debounce)
 // -------------------------------------------------------------
 function triggerAutoSimulate() {
     if (autoSimDebounceTimer) clearTimeout(autoSimDebounceTimer);
     autoSimDebounceTimer = setTimeout(() => {
         runSimulation(true);
-    }, 60);
+    }, 25);
 }
 
 // -------------------------------------------------------------
@@ -1248,7 +1409,10 @@ function triggerAutoSimulate() {
 async function runSimulation(isBackgroundAuto = false) {
     if (components.length === 0) return;
     if (groundNodes.size === 0) return;
-    if (isSimulating) return;
+    if (isSimulating) {
+        hasPendingSimulateRequest = true;
+        return;
+    }
 
     isSimulating = true;
     const runBtn = document.getElementById('runBtn');
@@ -1259,8 +1423,29 @@ async function runSimulation(isBackgroundAuto = false) {
 
     const { netMap } = computeElectricalNets();
 
+    // Determine simulation frequency & adaptive timescale
+    let maxFreq = 50.0;
+    components.forEach(c => {
+        if (c.props && c.props.freq && c.props.freq > maxFreq) {
+            maxFreq = c.props.freq;
+        }
+    });
+
+    let t_end = 0.04;
+    let dt = 2e-5;
+    if (maxFreq >= 1000) {
+        // High frequency DC-DC converters / inverters: 20 cycles with 80 pts/cycle
+        t_end = Math.min(0.004, 20.0 / maxFreq);
+        dt = (1.0 / maxFreq) / 80.0;
+        simCyclePeriod = 1.0 / maxFreq;
+    } else {
+        t_end = 0.04;
+        dt = 2e-5;
+        simCyclePeriod = 1.0 / maxFreq;
+    }
+
     const circuitPayload = {
-        simulation: { t_end: 0.04, dt: 2e-5 },
+        simulation: { t_end: t_end, dt: dt },
         components: [],
         control: {}
     };
@@ -1335,15 +1520,47 @@ async function runSimulation(isBackgroundAuto = false) {
         const data = await response.json();
         lastSimResults = data;
 
-        // Auto-configure channels if empty
+        // Filter activeChannels to only retain channels that actually exist in new results
+        const validChannels = new Set();
+        activeChannels.forEach(ch => {
+            if (ch.startsWith('V(')) {
+                const node = ch.slice(2, -1);
+                if (data.nodes[node] !== undefined) validChannels.add(ch);
+            } else if (ch.startsWith('I(')) {
+                const cid = ch.slice(2, -1);
+                if (data.branch_i[cid] !== undefined) validChannels.add(ch);
+            } else if (ch.startsWith('State(')) {
+                const cid = ch.slice(6, -1);
+                if (data.switches[cid] !== undefined) validChannels.add(ch);
+            }
+        });
+        activeChannels = validChannels;
+
+        // Auto-configure channels if empty or no channels valid
         if (activeChannels.size === 0) {
             const rComp = components.find(c => c.type === 'Resistor');
-            if (rComp) activeChannels.add(`I(${rComp.id})`);
+            if (rComp) {
+                activeChannels.add(`I(${rComp.id})`);
+                const n1 = netMap[`N_${Math.round(rComp.p1.x/gridSize)}_${Math.round(rComp.p1.y/gridSize)}`];
+                const n2 = netMap[`N_${Math.round(rComp.p2.x/gridSize)}_${Math.round(rComp.p2.y/gridSize)}`];
+                if (n1 && n1 !== 'GND' && n1 !== 'gnd') activeChannels.add(`V(${n1})`);
+                else if (n2 && n2 !== 'GND' && n2 !== 'gnd') activeChannels.add(`V(${n2})`);
+            }
             const acComp = components.find(c => c.type === 'V_AC');
-            if (acComp) activeChannels.add(`V(${netMap[`N_${Math.round(acComp.p1.x/gridSize)}_${Math.round(acComp.p1.y/gridSize)}`]})`);
-            Object.keys(data.nodes).forEach(n => {
-                if (n !== 'GND' && n !== 'gnd' && activeChannels.size < 3) activeChannels.add(`V(${n})`);
-            });
+            if (acComp) {
+                const nac = netMap[`N_${Math.round(acComp.p1.x/gridSize)}_${Math.round(acComp.p1.y/gridSize)}`];
+                if (nac && nac !== 'GND') activeChannels.add(`V(${nac})`);
+            }
+            const dcComp = components.find(c => c.type === 'V_DC');
+            if (dcComp) {
+                const ndc = netMap[`N_${Math.round(dcComp.p1.x/gridSize)}_${Math.round(dcComp.p1.y/gridSize)}`];
+                if (ndc && ndc !== 'GND') activeChannels.add(`V(${ndc})`);
+            }
+            if (activeChannels.size === 0) {
+                Object.keys(data.nodes).forEach(n => {
+                    if (n !== 'GND' && n !== 'gnd' && n !== '0' && activeChannels.size < 3) activeChannels.add(`V(${n})`);
+                });
+            }
         }
 
         buildChannelToggles();
@@ -1361,6 +1578,10 @@ async function runSimulation(isBackgroundAuto = false) {
         if (!isBackgroundAuto && runBtn) {
             runBtn.innerHTML = '<i class="fa-solid fa-play"></i> Run Simulation';
             runBtn.disabled = false;
+        }
+        if (hasPendingSimulateRequest) {
+            hasPendingSimulateRequest = false;
+            triggerAutoSimulate();
         }
     }
 }
@@ -1583,6 +1804,12 @@ function loadPreset(name) {
     probedNodes.clear();
     activeChannels.clear();
     compIdCounter = 1;
+    selectedComp = null;
+    lastSimResults = null;
+    hasPendingSimulateRequest = false;
+    renderEmptyPlot();
+    updatePropsInspector();
+    resetStats();
 
     // ---------------------------------------------------------
     // 1. Single-Phase Full-Bridge Thyristor Rectifier (Reference)
@@ -1632,7 +1859,7 @@ function loadPreset(name) {
     } else if (name === 'mosfet_buck' || name === 'buck') {
         const ox = 150, oy = 120;
 
-        const vdc = createComponent('V_DC', { x: ox, y: oy + 120 }, { x: ox, y: oy });
+        const vdc = createComponent('V_DC', { x: ox, y: oy }, { x: ox, y: oy + 120 });
         vdc.props = { value: 100 };
         components.push(vdc);
 
@@ -1668,7 +1895,7 @@ function loadPreset(name) {
     } else if (name === 'mosfet_boost' || name === 'boost') {
         const ox = 150, oy = 120;
 
-        const vdc = createComponent('V_DC', { x: ox, y: oy + 120 }, { x: ox, y: oy });
+        const vdc = createComponent('V_DC', { x: ox, y: oy }, { x: ox, y: oy + 120 });
         vdc.props = { value: 48 };
         components.push(vdc);
 
@@ -1704,7 +1931,7 @@ function loadPreset(name) {
     } else if (name === 'buck_boost') {
         const ox = 150, oy = 120;
 
-        const vdc = createComponent('V_DC', { x: ox, y: oy + 120 }, { x: ox, y: oy });
+        const vdc = createComponent('V_DC', { x: ox, y: oy }, { x: ox, y: oy + 120 });
         vdc.props = { value: 50 };
         components.push(vdc);
 
@@ -1740,7 +1967,7 @@ function loadPreset(name) {
     } else if (name === 'cuk') {
         const ox = 120, oy = 120;
 
-        const vdc = createComponent('V_DC', { x: ox, y: oy + 120 }, { x: ox, y: oy });
+        const vdc = createComponent('V_DC', { x: ox, y: oy }, { x: ox, y: oy + 120 });
         vdc.props = { value: 50 };
         components.push(vdc);
 
@@ -1785,7 +2012,7 @@ function loadPreset(name) {
     } else if (name === 'sepic') {
         const ox = 120, oy = 120;
 
-        const vdc = createComponent('V_DC', { x: ox, y: oy + 120 }, { x: ox, y: oy });
+        const vdc = createComponent('V_DC', { x: ox, y: oy }, { x: ox, y: oy + 120 });
         vdc.props = { value: 48 };
         components.push(vdc);
 
@@ -1829,7 +2056,7 @@ function loadPreset(name) {
     // ---------------------------------------------------------
     } else if (name === 'half_wave' || name === 'half_wave_diode') {
         const ox = 180, oy = 120;
-        components.push(createComponent('V_AC', { x: ox, y: oy + 120 }, { x: ox, y: oy }));
+        components.push(createComponent('V_AC', { x: ox, y: oy }, { x: ox, y: oy + 120 }));
         components.find(c => c.type === 'V_AC').props = { amplitude: 325, freq: 50, phase: 0 };
 
         components.push(createComponent('Diode', { x: ox, y: oy }, { x: ox + 90, y: oy }));
@@ -1850,7 +2077,7 @@ function loadPreset(name) {
     // ---------------------------------------------------------
     } else if (name === 'half_wave_scr') {
         const ox = 180, oy = 120;
-        components.push(createComponent('V_AC', { x: ox, y: oy + 120 }, { x: ox, y: oy }));
+        components.push(createComponent('V_AC', { x: ox, y: oy }, { x: ox, y: oy + 120 }));
         components.find(c => c.type === 'V_AC').props = { amplitude: 325, freq: 50, phase: 0 };
 
         const t1 = createComponent('Thyristor', { x: ox, y: oy }, { x: ox + 90, y: oy });
@@ -2202,7 +2429,7 @@ function loadPreset(name) {
     } else if (name === 'h_bridge_inverter') {
         const ox = 150, oy = 90;
 
-        const vdc = createComponent('V_DC', { x: ox, y: oy + 240 }, { x: ox, y: oy });
+        const vdc = createComponent('V_DC', { x: ox, y: oy }, { x: ox, y: oy + 240 });
         vdc.props = { value: 300 };
         components.push(vdc);
 
@@ -2243,7 +2470,7 @@ function loadPreset(name) {
     } else if (name === 'three_phase_inverter') {
         const ox = 120, oy = 90;
 
-        const vdc = createComponent('V_DC', { x: ox, y: oy + 240 }, { x: ox, y: oy });
+        const vdc = createComponent('V_DC', { x: ox, y: oy }, { x: ox, y: oy + 240 });
         vdc.props = { value: 300 };
         components.push(vdc);
 
@@ -2301,7 +2528,7 @@ function loadPreset(name) {
     // ---------------------------------------------------------
     } else if (name === 'inverter_leg') {
         const ox = 180, oy = 90;
-        components.push(createComponent('V_DC', { x: ox, y: oy + 180 }, { x: ox, y: oy }));
+        components.push(createComponent('V_DC', { x: ox, y: oy }, { x: ox, y: oy + 180 }));
         components.find(c => c.type === 'V_DC').props = { value: 300 };
 
         const mTop = createComponent('MOSFET', { x: ox + 90, y: oy }, { x: ox + 90, y: oy + 90 });

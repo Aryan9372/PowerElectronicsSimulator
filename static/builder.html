@@ -365,43 +365,50 @@
             </div>
         </div>
 
-        <!-- Right Panel: Properties Inspector & Oscilloscope -->
-        <div class="w-96 panel border-l flex flex-col overflow-hidden z-10 shrink-0">
-            <!-- Properties Inspector (Top half) -->
-            <div class="h-64 border-b border-slate-700/80 flex flex-col overflow-hidden">
-                <div class="px-3 py-2 bg-slate-900 border-b border-slate-800 flex items-center justify-between">
+        <!-- Right Panel: Properties Inspector & Oscilloscope (Enlarged for Clarity) -->
+        <div id="rightPanel" class="w-[480px] lg:w-[520px] panel border-l flex flex-col overflow-hidden z-10 shrink-0 transition-all duration-300">
+            <!-- Properties Inspector (Compact Top half) -->
+            <div id="propsPanel" class="max-h-56 border-b border-slate-700/80 flex flex-col overflow-hidden">
+                <div class="px-3 py-1.5 bg-slate-900 border-b border-slate-800 flex items-center justify-between">
                     <span class="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                        <i class="fa-solid fa-sliders text-cyan-400"></i> Component Parameters
+                        <i class="fa-solid fa-sliders text-cyan-400"></i> Parameters
                     </span>
-                    <span id="selectedCompBadge" class="text-[11px] px-2 py-0.5 rounded bg-slate-800 text-slate-400 font-mono">None Selected</span>
+                    <span id="selectedCompBadge" class="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-400 font-mono">None Selected</span>
                 </div>
-                <div id="propsContainer" class="flex-1 p-3 overflow-y-auto text-xs flex flex-col gap-3">
-                    <div class="text-slate-500 italic text-center py-6 flex flex-col items-center gap-2">
-                        <i class="fa-solid fa-hand-pointer text-2xl text-slate-600"></i>
-                        <span>Click any component in the schematic to inspect and change its electrical parameters live.</span>
+                <div id="propsContainer" class="flex-1 p-2.5 overflow-y-auto text-xs flex flex-col gap-2">
+                    <div class="text-slate-500 italic text-center py-4 flex flex-col items-center gap-1.5">
+                        <i class="fa-solid fa-hand-pointer text-xl text-slate-600"></i>
+                        <span>Click any component in the schematic to inspect and change its parameters live.</span>
                     </div>
                 </div>
             </div>
 
-            <!-- Waveform & Channel Selector (Bottom half) -->
+            <!-- Waveform & Channel Selector (Expanded Bottom half) -->
             <div class="flex-1 flex flex-col overflow-hidden">
-                <div class="px-3 py-2 bg-slate-900 border-b border-slate-800 flex items-center justify-between">
+                <div class="px-3 py-1.5 bg-slate-900 border-b border-slate-800 flex items-center justify-between">
                     <span class="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
                         <i class="fa-solid fa-chart-line text-emerald-400"></i> Oscilloscope Waveforms
                     </span>
-                    <button onclick="toggleAllWaveforms(true)" class="text-[11px] text-cyan-400 hover:underline">Select All</button>
+                    <div class="flex items-center gap-2">
+                        <button onclick="toggleExpandGraph()" id="expandGraphBtn" class="text-[11px] px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition flex items-center gap-1" title="Toggle Expanded Graph Width">
+                            <i id="expandGraphIcon" class="fa-solid fa-up-right-and-down-left-from-center text-[10px] text-cyan-400"></i>
+                            <span id="expandGraphLabel">Expand</span>
+                        </button>
+                        <button onclick="toggleAllWaveforms(true)" class="text-[11px] text-cyan-400 hover:underline">Select All</button>
+                    </div>
                 </div>
 
                 <!-- Channel Toggles Carousel/List -->
-                <div class="px-3 py-2 bg-slate-950/70 border-b border-slate-800/80 max-h-28 overflow-y-auto">
-                    <div id="channelCheckboxes" class="flex flex-wrap gap-1.5 text-[11px]">
+                <div class="px-3 py-1.5 bg-slate-950/70 border-b border-slate-800/80 max-h-20 overflow-y-auto">
+                    <div id="channelCheckboxes" class="flex flex-wrap gap-1 text-[11px]">
                         <span class="text-slate-500 italic">Run simulation to view channels...</span>
                     </div>
                 </div>
 
-                <!-- Plot Container -->
-                <div class="flex-1 relative p-1 bg-slate-950 flex flex-col">
+                <!-- Plot Container with Sweep Cursor Overlay -->
+                <div id="plotWrapper" class="flex-1 relative p-1 bg-slate-950 flex flex-col min-h-0">
                     <div id="plot" class="w-full h-full"></div>
+                    <canvas id="plotCursorCanvas" class="absolute inset-0 pointer-events-none z-20"></canvas>
                 </div>
             </div>
         </div>
