@@ -90,6 +90,38 @@
         .glow-cyan {
             box-shadow: 0 0 15px rgba(6, 182, 212, 0.35);
         }
+        .transient-preset-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.15rem 0.45rem;
+            border-radius: 0.375rem;
+            font-size: 0.6875rem;
+            font-weight: 600;
+            color: #94a3b8;
+            background: #0f172a;
+            border: 1px solid #1e293b;
+            transition: all 0.15s ease;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .transient-preset-btn:hover {
+            color: #f8fafc;
+            background: #1e293b;
+            border-color: #38bdf8;
+        }
+        .transient-preset-btn.active {
+            background: rgba(6, 182, 212, 0.25);
+            color: #22d3ee;
+            border-color: #06b6d4;
+            box-shadow: 0 0 8px rgba(6, 182, 212, 0.3);
+        }
+        #transientDurationBar.hidden {
+            display: none !important;
+        }
+        #transientDurationBar:not(.hidden) {
+            display: flex !important;
+        }
     </style>
 </head>
 <body class="flex flex-col h-screen w-screen overflow-hidden">
@@ -269,59 +301,61 @@
                 </div>
             </div>
 
-            <!-- Real-Time Playback HUD Bar (Top Center/Right) -->
+            <!-- Real-Time Playback HUD Bar (Bottom of Schematic Canvas) -->
             <div class="absolute bottom-20 left-4 right-4 z-10 flex items-center justify-between pointer-events-none">
-                <div class="card px-3 py-2 rounded-xl shadow-2xl flex items-center gap-4 text-xs text-slate-300 border border-slate-700/80 backdrop-blur-md bg-slate-900/95 pointer-events-auto">
-                    <!-- Play/Pause Button -->
-                    <button id="playPauseBtn" onclick="togglePlayPause()" class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold flex items-center gap-1.5 shadow-md shadow-emerald-600/30 transition">
-                        <i class="fa-solid fa-play" id="playIcon"></i> <span id="playLabel">Run Real-Time</span>
-                    </button>
-                    
-                    <!-- Rewind / Step -->
-                    <div class="flex items-center gap-1">
-                        <button onclick="stepAnimation(-1)" title="Step Backward" class="w-7 h-7 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center">
-                            <i class="fa-solid fa-backward-step"></i>
+                <div class="card p-2.5 rounded-xl shadow-2xl flex flex-col gap-2 text-xs text-slate-300 border border-slate-700/80 backdrop-blur-md bg-slate-900/95 pointer-events-auto max-w-full">
+                    <!-- Top Row: Playback Controls & Simulation Speed -->
+                    <div class="flex items-center gap-2.5 flex-wrap">
+                        <!-- Play/Pause Button -->
+                        <button id="playPauseBtn" onclick="togglePlayPause()" class="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold flex items-center gap-1.5 shadow-md shadow-emerald-600/30 transition">
+                            <i class="fa-solid fa-play" id="playIcon"></i> <span id="playLabel">Run Real-Time</span>
                         </button>
-                        <button onclick="stepAnimation(1)" title="Step Forward" class="w-7 h-7 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center">
-                            <i class="fa-solid fa-forward-step"></i>
-                        </button>
-                        <button onclick="resetAnimation()" title="Reset Time" class="w-7 h-7 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center">
-                            <i class="fa-solid fa-rotate-left"></i>
-                        </button>
+                        
+                        <!-- Rewind / Step -->
+                        <div class="flex items-center gap-1">
+                            <button onclick="stepAnimation(-1)" title="Step Backward" class="w-6 h-6 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center">
+                                <i class="fa-solid fa-backward-step text-[10px]"></i>
+                            </button>
+                            <button onclick="stepAnimation(1)" title="Step Forward" class="w-6 h-6 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center">
+                                <i class="fa-solid fa-forward-step text-[10px]"></i>
+                            </button>
+                            <button onclick="resetAnimation()" title="Reset Time" class="w-6 h-6 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center">
+                                <i class="fa-solid fa-rotate-left text-[10px]"></i>
+                            </button>
+                        </div>
+
+                        <span class="text-slate-600">|</span>
+
+                        <!-- Speed Selector -->
+                        <div class="flex items-center gap-1 text-[11px] flex-wrap">
+                            <span class="text-slate-400 mr-0.5"><i class="fa-solid fa-gauge text-cyan-400"></i> Speed:</span>
+                            <button onclick="setSimSpeed(0.01)" class="speed-btn px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 font-mono text-[10px]" id="speed-0.01" title="0.01x (100x Slow Motion)">0.01x</button>
+                            <button onclick="setSimSpeed(0.05)" class="speed-btn px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 font-mono text-[10px]" id="speed-0.05" title="0.05x (20x Slow Motion)">0.05x</button>
+                            <button onclick="setSimSpeed(0.1)" class="speed-btn px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 font-mono text-[10px]" id="speed-0.1" title="0.1x (10x Slow Motion)">0.1x</button>
+                            <button onclick="setSimSpeed(0.25)" class="speed-btn px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 font-mono text-[10px]" id="speed-0.25">0.25x</button>
+                            <button onclick="setSimSpeed(0.5)" class="speed-btn px-1.5 py-0.5 rounded bg-cyan-900 border border-cyan-500 text-white font-bold font-mono text-[10px]" id="speed-0.5">0.5x</button>
+                            <button onclick="setSimSpeed(1.0)" class="speed-btn px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 font-mono text-[10px]" id="speed-1.0">1x</button>
+                            <button onclick="setSimSpeed(2.0)" class="speed-btn px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 font-mono text-[10px]" id="speed-2.0">2x</button>
+                            <!-- Speed Slider -->
+                            <input type="range" id="speedSlider" min="0.01" max="2.0" step="0.01" value="0.5" oninput="setSimSpeed(parseFloat(this.value))" class="w-16 h-1 bg-slate-700 rounded cursor-pointer ml-1" title="Continuous Time Scale Slider">
+                            <span id="speedValueDisplay" class="font-mono text-cyan-400 font-bold text-[10px] min-w-[32px] text-right">0.50x</span>
+                        </div>
                     </div>
 
-                    <span class="text-slate-600">|</span>
+                    <!-- Bottom Row: Phase Angle (wt) Slider & Active Conduction Status -->
+                    <div class="flex items-center justify-between gap-3 pt-1 border-t border-slate-800/80">
+                        <!-- Angle Slider & Readout (stretches comfortably across the row, never gets chopped off) -->
+                        <div class="flex items-center gap-2 flex-1 min-w-0">
+                            <span class="text-slate-400 text-[11px] font-semibold whitespace-nowrap"><i class="fa-regular fa-clock text-amber-400"></i> Angle &omega;t:</span>
+                            <input type="range" id="angleSlider" min="0" max="360" step="1" value="0" oninput="onAngleSliderInput(parseFloat(this.value))" class="flex-1 h-1.5 bg-slate-700 rounded-lg cursor-pointer accent-cyan-400">
+                            <span id="angleValueDisplay" class="font-mono text-cyan-400 font-bold text-xs min-w-[46px] text-right">0.0&deg;</span>
+                        </div>
 
-                    <!-- Speed Selector -->
-                    <div class="flex items-center gap-1 text-[11px]">
-                        <span class="text-slate-400 mr-0.5"><i class="fa-solid fa-gauge text-cyan-400"></i> Speed:</span>
-                        <button onclick="setSimSpeed(0.01)" class="speed-btn px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 font-mono text-[10px]" id="speed-0.01" title="0.01x (100x Slow Motion)">0.01x</button>
-                        <button onclick="setSimSpeed(0.05)" class="speed-btn px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 font-mono text-[10px]" id="speed-0.05" title="0.05x (20x Slow Motion)">0.05x</button>
-                        <button onclick="setSimSpeed(0.1)" class="speed-btn px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 font-mono text-[10px]" id="speed-0.1" title="0.1x (10x Slow Motion)">0.1x</button>
-                        <button onclick="setSimSpeed(0.25)" class="speed-btn px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 font-mono text-[10px]" id="speed-0.25">0.25x</button>
-                        <button onclick="setSimSpeed(0.5)" class="speed-btn px-1.5 py-0.5 rounded bg-cyan-900 border border-cyan-500 text-white font-bold font-mono text-[10px]" id="speed-0.5">0.5x</button>
-                        <button onclick="setSimSpeed(1.0)" class="speed-btn px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 font-mono text-[10px]" id="speed-1.0">1x</button>
-                        <button onclick="setSimSpeed(2.0)" class="speed-btn px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 font-mono text-[10px]" id="speed-2.0">2x</button>
-                        <!-- Speed Slider -->
-                        <input type="range" id="speedSlider" min="0.01" max="2.0" step="0.01" value="0.5" oninput="setSimSpeed(parseFloat(this.value))" class="w-16 h-1 bg-slate-700 rounded cursor-pointer ml-1" title="Continuous Time Scale Slider">
-                        <span id="speedValueDisplay" class="font-mono text-cyan-400 font-bold text-[10px] min-w-[32px] text-right">0.50x</span>
-                    </div>
-
-                    <span class="text-slate-600">|</span>
-
-                    <!-- Angle Slider & Readout -->
-                    <div class="flex items-center gap-2 min-w-[200px]">
-                        <span class="text-slate-400 text-[11px] font-semibold whitespace-nowrap"><i class="fa-regular fa-clock text-amber-400"></i> Angle &omega;t:</span>
-                        <input type="range" id="angleSlider" min="0" max="360" step="1" value="0" oninput="onAngleSliderInput(parseFloat(this.value))" class="flex-1 h-1 bg-slate-700 rounded-lg cursor-pointer">
-                        <span id="angleValueDisplay" class="font-mono text-cyan-400 font-bold text-xs min-w-[42px] text-right">0.0&deg;</span>
-                    </div>
-
-                    <span class="text-slate-600">|</span>
-
-                    <!-- Active Conduction Loop Status -->
-                    <div id="conductionStatusBadge" class="px-2.5 py-1 rounded bg-slate-800/80 border border-slate-700 text-[11px] font-mono text-cyan-300 flex items-center gap-1.5">
-                        <span class="w-2 h-2 rounded-full bg-cyan-400 inline-block"></span>
-                        <span id="conductionStatusText">Inactive</span>
+                        <!-- Active Conduction Loop Status -->
+                        <div id="conductionStatusBadge" class="px-2.5 py-0.5 rounded bg-slate-800/90 border border-slate-700 text-[11px] font-mono text-cyan-300 flex items-center gap-1.5 whitespace-nowrap shrink-0">
+                            <span class="w-2 h-2 rounded-full bg-cyan-400 inline-block shadow-sm shadow-cyan-400"></span>
+                            <span id="conductionStatusText">Inactive</span>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -436,6 +470,51 @@
                             <span id="expandGraphLabel">Expand</span>
                         </button>
                         <button onclick="toggleAllWaveforms(true)" class="text-[11px] text-cyan-400 hover:underline">Select All</button>
+                        <button id="btnShortcutsHelp" onclick="toggleShortcutsModal()" class="text-slate-400 hover:text-cyan-400 text-xs px-1.5 py-0.5 rounded border border-slate-700 bg-slate-900 ml-1" title="Keyboard Shortcuts"><i class="fa-solid fa-keyboard"></i></button>
+                    </div>
+                </div>
+
+                <!-- Transient View Duration Toolbar (Visible in Transient Mode) -->
+                <div id="transientDurationBar" class="hidden px-3 py-1.5 bg-slate-950/80 border-b border-slate-800 items-center justify-between gap-y-1.5 gap-x-2 text-xs flex-wrap">
+                    <!-- Left: Label & Quick Preset Pills -->
+                    <div class="flex items-center gap-1.5 flex-wrap">
+                        <span class="text-slate-400 font-semibold text-[11px] flex items-center gap-1">
+                            <i class="fa-solid fa-arrows-left-right text-cyan-400"></i> View Duration:
+                        </span>
+                        <div class="inline-flex items-center gap-1 bg-slate-900/90 p-0.5 rounded-lg border border-slate-800">
+                            <button onclick="setTransientViewDuration(20)" id="tbtn-20" class="transient-preset-btn" title="View first 20 ms window">20 ms</button>
+                            <button onclick="setTransientViewDuration(50)" id="tbtn-50" class="transient-preset-btn" title="View first 50 ms window">50 ms</button>
+                            <button onclick="setTransientViewDuration(100)" id="tbtn-100" class="transient-preset-btn" title="View first 100 ms window">100 ms</button>
+                            <button onclick="setTransientViewDuration(200)" id="tbtn-200" class="transient-preset-btn" title="View first 200 ms window">200 ms</button>
+                            <button onclick="setTransientViewDuration('all')" id="tbtn-all" class="transient-preset-btn active" title="View full simulation timeline">Full Timeline</button>
+                        </div>
+                    </div>
+
+                    <!-- Right: Numeric Input, Range Slider & Status Readout Badge -->
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <!-- Numeric fine control -->
+                        <div class="flex items-center gap-1 bg-slate-900/90 px-1.5 py-0.5 rounded border border-slate-800">
+                            <input type="number" id="transientDurationInput" min="5" max="2000" step="5" onchange="onTransientDurationInput(parseFloat(this.value))" class="w-16 bg-slate-900 border border-slate-700 text-cyan-300 rounded px-1.5 py-0.5 text-xs text-right font-mono" placeholder="ms">
+                            <span class="text-slate-400 text-[10px]">ms</span>
+                        </div>
+
+                        <!-- Continuous Slider -->
+                        <div class="flex items-center gap-1 bg-slate-900/90 px-1.5 py-0.5 rounded border border-slate-800">
+                            <input type="range" id="transientDurationSlider" min="10" max="500" step="5" value="200" oninput="onTransientDurationSlider(parseFloat(this.value))" class="w-24 h-1 bg-slate-700 rounded cursor-pointer ml-1" title="Adjust visible duration">
+                        </div>
+
+                        <!-- Status Readout Badge -->
+                        <div class="px-2 py-0.5 rounded bg-cyan-950/60 border border-cyan-800/60 flex items-center shadow-sm shadow-cyan-950">
+                            <span id="transientDurationReadout" class="font-mono text-cyan-300 font-bold text-[11px]">All (200 ms)</span>
+                        </div>
+
+                        <!-- Reset Zoom Button -->
+                        <button id="btnResetZoom" onclick="window.ViewHistory.resetViewToFull()" class="text-slate-400 hover:text-cyan-300 text-[11px] px-2 py-0.5 rounded border border-slate-700/80 bg-slate-900/80 hover:bg-slate-800 transition flex items-center gap-1" title="Reset Zoom to Full Timeline"><i class="fa-solid fa-expand text-cyan-400"></i> Reset</button>
+
+                        <!-- CSV Data Export Button -->
+                        <button onclick="exportTransientDataCSV()" id="btnExportCSV" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-cyan-300 border border-slate-700 text-[11px] font-semibold transition flex items-center gap-1 shadow-sm" title="Export current transient window to CSV file">
+                            <i class="fa-solid fa-file-csv text-cyan-400"></i> Export CSV
+                        </button>
                     </div>
                 </div>
 
@@ -451,6 +530,132 @@
                     <div id="plot" class="w-full h-full flex-1" style="min-height: 200px;"></div>
                     <canvas id="plotCursorCanvas" class="absolute inset-0 pointer-events-none z-20" style="background: transparent !important;"></canvas>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Oscilloscope Keyboard Shortcuts Cheat Sheet Modal -->
+    <div id="shortcutsModal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4" onclick="if(event.target === this) toggleShortcutsModal(false)">
+        <div class="card w-full max-w-lg rounded-2xl flex flex-col overflow-hidden border border-cyan-500/40 shadow-2xl bg-slate-900 shadow-cyan-500/10" onclick="event.stopPropagation()">
+            <!-- Modal Header -->
+            <div class="px-5 py-3.5 border-b border-slate-800 flex items-center justify-between bg-slate-950/80">
+                <div class="flex items-center gap-3">
+                    <div class="w-9 h-9 rounded-xl bg-cyan-500/20 border border-cyan-500/50 flex items-center justify-center text-cyan-400 text-base shadow-sm shadow-cyan-500/20">
+                        <i class="fa-solid fa-keyboard"></i>
+                    </div>
+                    <div>
+                        <h2 class="text-sm font-bold text-white flex items-center gap-2">
+                            Oscilloscope & Transient Shortcuts
+                            <span class="text-[10px] px-2 py-0.5 rounded-full bg-cyan-950 text-cyan-400 border border-cyan-800 font-mono">PRO</span>
+                        </h2>
+                        <p class="text-[11px] text-slate-400">Quick keyboard controls for waveform analysis and scrubbing</p>
+                    </div>
+                </div>
+                <button onclick="toggleShortcutsModal(false)" class="w-7 h-7 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition" title="Close (Esc)">
+                    <i class="fa-solid fa-xmark text-xs"></i>
+                </button>
+            </div>
+
+            <!-- Modal Content -->
+            <div class="p-5 flex flex-col gap-4 text-xs overflow-y-auto max-h-[70vh]">
+                <!-- Section 1: Transient Viewing Duration -->
+                <div class="bg-slate-950/60 p-3.5 rounded-xl border border-slate-800/80">
+                    <div class="text-[11px] font-bold text-cyan-400 uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
+                        <i class="fa-solid fa-arrows-left-right text-xs"></i>
+                        <span>Transient Viewing Window</span>
+                    </div>
+                    <div class="grid grid-cols-1 gap-2">
+                        <div class="flex items-center justify-between py-1 border-b border-slate-800/50">
+                            <span class="text-slate-300">Step Down Duration (200 &rarr; 100 &rarr; 50 &rarr; 20 ms)</span>
+                            <kbd class="px-2 py-0.5 bg-slate-800 border border-slate-600 rounded text-cyan-300 font-mono text-[11px] shadow-sm font-bold">[</kbd>
+                        </div>
+                        <div class="flex items-center justify-between py-1 border-b border-slate-800/50">
+                            <span class="text-slate-300">Step Up Duration (20 &rarr; 50 &rarr; 100 &rarr; 200 &rarr; All)</span>
+                            <kbd class="px-2 py-0.5 bg-slate-800 border border-slate-600 rounded text-cyan-300 font-mono text-[11px] shadow-sm font-bold">]</kbd>
+                        </div>
+                        <div class="flex items-center justify-between py-1">
+                            <span class="text-slate-300">Quick Duration Presets</span>
+                            <div class="flex gap-1">
+                                <kbd class="px-1.5 py-0.5 bg-slate-800 border border-slate-700 rounded text-amber-300 font-mono text-[11px]" title="20 ms">1</kbd>
+                                <kbd class="px-1.5 py-0.5 bg-slate-800 border border-slate-700 rounded text-amber-300 font-mono text-[11px]" title="50 ms">2</kbd>
+                                <kbd class="px-1.5 py-0.5 bg-slate-800 border border-slate-700 rounded text-amber-300 font-mono text-[11px]" title="100 ms">3</kbd>
+                                <kbd class="px-1.5 py-0.5 bg-slate-800 border border-slate-700 rounded text-amber-300 font-mono text-[11px]" title="200 ms">4</kbd>
+                                <kbd class="px-1.5 py-0.5 bg-slate-800 border border-slate-700 rounded text-cyan-300 font-mono text-[11px]" title="Full Timeline">0</kbd>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section 2: Sweep & Scrubbing -->
+                <div class="bg-slate-950/60 p-3.5 rounded-xl border border-slate-800/80">
+                    <div class="text-[11px] font-bold text-amber-400 uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
+                        <i class="fa-solid fa-play text-xs"></i>
+                        <span>Sweep & Interactive Scrubbing</span>
+                    </div>
+                    <div class="grid grid-cols-1 gap-2">
+                        <div class="flex items-center justify-between py-1 border-b border-slate-800/50">
+                            <span class="text-slate-300">Toggle Pause / Resume Sweep Loop</span>
+                            <kbd class="px-2.5 py-0.5 bg-slate-800 border border-slate-600 rounded text-emerald-300 font-mono text-[11px] font-bold">Space</kbd>
+                        </div>
+                        <div class="flex items-center justify-between py-1 border-b border-slate-800/50">
+                            <span class="text-slate-300">Step Scrub Cursor (±1 ms)</span>
+                            <div class="flex gap-1">
+                                <kbd class="px-2 py-0.5 bg-slate-800 border border-slate-600 rounded text-slate-300 font-mono text-[11px]">←</kbd>
+                                <kbd class="px-2 py-0.5 bg-slate-800 border border-slate-600 rounded text-slate-300 font-mono text-[11px]">→</kbd>
+                            </div>
+                        </div>
+                        <div class="flex items-center justify-between py-1">
+                            <span class="text-slate-300">Fast Step Scrub Cursor (±5 ms)</span>
+                            <div class="flex items-center gap-1">
+                                <kbd class="px-1.5 py-0.5 bg-slate-800 border border-slate-600 rounded text-slate-300 font-mono text-[11px]">Shift</kbd>
+                                <span class="text-slate-500">+</span>
+                                <kbd class="px-1.5 py-0.5 bg-slate-800 border border-slate-600 rounded text-slate-300 font-mono text-[11px]">←</kbd>
+                                <span class="text-slate-500">/</span>
+                                <kbd class="px-1.5 py-0.5 bg-slate-800 border border-slate-600 rounded text-slate-300 font-mono text-[11px]">→</kbd>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section 3: Schematic & Tools (Quick Reference) -->
+                <div class="bg-slate-950/60 p-3.5 rounded-xl border border-slate-800/80">
+                    <div class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
+                        <i class="fa-solid fa-microchip text-xs"></i>
+                        <span>Schematic CAD & Tools</span>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2 text-[11px]">
+                        <div class="flex items-center justify-between py-0.5">
+                            <span class="text-slate-400">Rotate Component</span>
+                            <kbd class="px-1.5 py-0.5 bg-slate-800 border border-slate-700 rounded text-slate-300 font-mono">R</kbd>
+                        </div>
+                        <div class="flex items-center justify-between py-0.5">
+                            <span class="text-slate-400">Delete Component</span>
+                            <kbd class="px-1.5 py-0.5 bg-slate-800 border border-slate-700 rounded text-slate-300 font-mono">Del</kbd>
+                        </div>
+                        <div class="flex items-center justify-between py-0.5">
+                            <span class="text-slate-400">Pan Circuit Canvas</span>
+                            <div class="flex items-center gap-1">
+                                <kbd class="px-1 py-0.5 bg-slate-800 border border-slate-700 rounded text-slate-300 font-mono text-[10px]">Space</kbd>
+                                <span class="text-slate-500">+</span>
+                                <span class="text-slate-400 text-[10px]">Drag</span>
+                            </div>
+                        </div>
+                        <div class="flex items-center justify-between py-0.5">
+                            <span class="text-slate-400">Close Dialogs</span>
+                            <kbd class="px-1.5 py-0.5 bg-slate-800 border border-slate-700 rounded text-slate-300 font-mono">Esc</kbd>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Modal Footer -->
+            <div class="px-5 py-3 border-t border-slate-800 bg-slate-950/80 flex items-center justify-between text-xs">
+                <span class="text-slate-500 text-[11px] flex items-center gap-1">
+                    <i class="fa-regular fa-lightbulb text-amber-400"></i> Press <kbd class="px-1 bg-slate-800 rounded font-mono text-slate-400">?</kbd> anytime for shortcuts
+                </span>
+                <button onclick="toggleShortcutsModal(false)" class="px-3 py-1 rounded-lg bg-cyan-600/30 hover:bg-cyan-600/50 text-cyan-300 border border-cyan-500/40 font-semibold transition text-xs">
+                    Got it
+                </button>
             </div>
         </div>
     </div>
@@ -765,6 +970,26 @@
     </div>
 
     <!-- Script imports -->
+    <script src="/eng_units.js"></script>
     <script src="builder.js"></script>
+    <script src="/view_history.js"></script>
+    <script src="/shortcuts.js"></script>
+    <script src="/export_utils.js"></script>
+    <script>
+        // Ensure Transient View Duration toolbar visibility tracks view mode buttons
+        document.addEventListener('DOMContentLoaded', () => {
+            const bar = document.getElementById('transientDurationBar');
+            const btnTransient = document.getElementById('btnViewTransient');
+            const btnSteady = document.getElementById('btnViewSteady');
+            if (bar && btnTransient && btnSteady) {
+                btnTransient.addEventListener('click', () => {
+                    bar.classList.remove('hidden');
+                });
+                btnSteady.addEventListener('click', () => {
+                    bar.classList.add('hidden');
+                });
+            }
+        });
+    </script>
 </body>
 </html>

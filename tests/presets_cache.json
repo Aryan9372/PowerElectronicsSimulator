@@ -1,0 +1,1899 @@
+{
+  "buck": {
+    "name": "buck",
+    "payload_template": {
+      "simulation": {
+        "t_end": 0.1,
+        "dt": 0.0000025,
+        "cycle_count": 10
+      },
+      "components": [
+        {
+          "id": "V_dc1",
+          "type": "V_DC",
+          "nodes": [
+            "N1",
+            "GND"
+          ],
+          "value": 100
+        },
+        {
+          "id": "M2",
+          "type": "MOSFET",
+          "nodes": [
+            "N1",
+            "N2"
+          ],
+          "ron": 0.005,
+          "roff": 1000000,
+          "body_diode": true
+        },
+        {
+          "id": "D3",
+          "type": "Diode",
+          "nodes": [
+            "GND",
+            "N2"
+          ],
+          "ron": 0.001,
+          "roff": 1000000
+        },
+        {
+          "id": "L4",
+          "type": "Inductor",
+          "nodes": [
+            "N2",
+            "N3"
+          ],
+          "value": 0.005
+        },
+        {
+          "id": "C5",
+          "type": "Capacitor",
+          "nodes": [
+            "N3",
+            "GND"
+          ],
+          "value": 0.00021999999999999998,
+          "v0": 50
+        },
+        {
+          "id": "R6",
+          "type": "Resistor",
+          "nodes": [
+            "N3",
+            "GND"
+          ],
+          "value": 10
+        }
+      ],
+      "control": {
+        "M2": {
+          "type": "pwm",
+          "freq": 5000,
+          "duty": 50,
+          "phase": 0
+        }
+      },
+      "window": {
+        "t_start": 0,
+        "t_end": 0.1
+      }
+    }
+  },
+  "boost": {
+    "name": "boost",
+    "payload_template": {
+      "simulation": {
+        "t_end": 0.1,
+        "dt": 0.0000025,
+        "cycle_count": 10
+      },
+      "components": [
+        {
+          "id": "V_dc1",
+          "type": "V_DC",
+          "nodes": [
+            "N1",
+            "GND"
+          ],
+          "value": 48
+        },
+        {
+          "id": "L2",
+          "type": "Inductor",
+          "nodes": [
+            "N1",
+            "N2"
+          ],
+          "value": 0.01
+        },
+        {
+          "id": "M3",
+          "type": "MOSFET",
+          "nodes": [
+            "N2",
+            "GND"
+          ],
+          "ron": 0.005,
+          "roff": 1000000,
+          "body_diode": true
+        },
+        {
+          "id": "D4",
+          "type": "Diode",
+          "nodes": [
+            "N2",
+            "N3"
+          ],
+          "ron": 0.001,
+          "roff": 1000000
+        },
+        {
+          "id": "C5",
+          "type": "Capacitor",
+          "nodes": [
+            "N3",
+            "GND"
+          ],
+          "value": 0.00021999999999999998,
+          "v0": 96
+        },
+        {
+          "id": "R6",
+          "type": "Resistor",
+          "nodes": [
+            "N3",
+            "GND"
+          ],
+          "value": 25
+        }
+      ],
+      "control": {
+        "M3": {
+          "type": "pwm",
+          "freq": 5000,
+          "duty": 50,
+          "phase": 0
+        }
+      },
+      "window": {
+        "t_start": 0,
+        "t_end": 0.1
+      }
+    }
+  },
+  "buck_boost": {
+    "name": "buck_boost",
+    "payload_template": {
+      "simulation": {
+        "t_end": 0.1,
+        "dt": 0.0000025,
+        "cycle_count": 10
+      },
+      "components": [
+        {
+          "id": "V_dc1",
+          "type": "V_DC",
+          "nodes": [
+            "N1",
+            "GND"
+          ],
+          "value": 50
+        },
+        {
+          "id": "M2",
+          "type": "MOSFET",
+          "nodes": [
+            "N1",
+            "N2"
+          ],
+          "ron": 0.005,
+          "roff": 1000000,
+          "body_diode": true
+        },
+        {
+          "id": "L3",
+          "type": "Inductor",
+          "nodes": [
+            "N2",
+            "GND"
+          ],
+          "value": 0.008
+        },
+        {
+          "id": "D4",
+          "type": "Diode",
+          "nodes": [
+            "N3",
+            "N2"
+          ],
+          "ron": 0.001,
+          "roff": 1000000
+        },
+        {
+          "id": "C5",
+          "type": "Capacitor",
+          "nodes": [
+            "N3",
+            "GND"
+          ],
+          "value": 0.00021999999999999998,
+          "v0": -50
+        },
+        {
+          "id": "R6",
+          "type": "Resistor",
+          "nodes": [
+            "N3",
+            "GND"
+          ],
+          "value": 20
+        }
+      ],
+      "control": {
+        "M2": {
+          "type": "pwm",
+          "freq": 5000,
+          "duty": 50,
+          "phase": 0
+        }
+      },
+      "window": {
+        "t_start": 0,
+        "t_end": 0.1
+      }
+    }
+  },
+  "cuk": {
+    "name": "cuk",
+    "payload_template": {
+      "simulation": {
+        "t_end": 0.1,
+        "dt": 0.0000025,
+        "cycle_count": 10
+      },
+      "components": [
+        {
+          "id": "V_dc1",
+          "type": "V_DC",
+          "nodes": [
+            "N1",
+            "GND"
+          ],
+          "value": 50
+        },
+        {
+          "id": "L2",
+          "type": "Inductor",
+          "nodes": [
+            "N1",
+            "N2"
+          ],
+          "value": 0.01
+        },
+        {
+          "id": "M3",
+          "type": "MOSFET",
+          "nodes": [
+            "N2",
+            "GND"
+          ],
+          "ron": 0.005,
+          "roff": 1000000,
+          "body_diode": true
+        },
+        {
+          "id": "C4",
+          "type": "Capacitor",
+          "nodes": [
+            "N2",
+            "N3"
+          ],
+          "value": 0.000047,
+          "v0": 100
+        },
+        {
+          "id": "D5",
+          "type": "Diode",
+          "nodes": [
+            "N3",
+            "GND"
+          ],
+          "ron": 0.001,
+          "roff": 1000000
+        },
+        {
+          "id": "L6",
+          "type": "Inductor",
+          "nodes": [
+            "N3",
+            "N4"
+          ],
+          "value": 0.01
+        },
+        {
+          "id": "C7",
+          "type": "Capacitor",
+          "nodes": [
+            "N4",
+            "GND"
+          ],
+          "value": 0.00021999999999999998,
+          "v0": -50
+        },
+        {
+          "id": "R8",
+          "type": "Resistor",
+          "nodes": [
+            "N4",
+            "GND"
+          ],
+          "value": 20
+        }
+      ],
+      "control": {
+        "M3": {
+          "type": "pwm",
+          "freq": 5000,
+          "duty": 50,
+          "phase": 0
+        }
+      },
+      "window": {
+        "t_start": 0,
+        "t_end": 0.1
+      }
+    }
+  },
+  "sepic": {
+    "name": "sepic",
+    "payload_template": {
+      "simulation": {
+        "t_end": 0.1,
+        "dt": 0.0000025,
+        "cycle_count": 10
+      },
+      "components": [
+        {
+          "id": "V_dc1",
+          "type": "V_DC",
+          "nodes": [
+            "N1",
+            "GND"
+          ],
+          "value": 48
+        },
+        {
+          "id": "L2",
+          "type": "Inductor",
+          "nodes": [
+            "N1",
+            "N2"
+          ],
+          "value": 0.01
+        },
+        {
+          "id": "M3",
+          "type": "MOSFET",
+          "nodes": [
+            "N2",
+            "GND"
+          ],
+          "ron": 0.005,
+          "roff": 1000000,
+          "body_diode": true
+        },
+        {
+          "id": "C4",
+          "type": "Capacitor",
+          "nodes": [
+            "N2",
+            "N3"
+          ],
+          "value": 0.000047,
+          "v0": 48
+        },
+        {
+          "id": "L5",
+          "type": "Inductor",
+          "nodes": [
+            "N3",
+            "GND"
+          ],
+          "value": 0.01
+        },
+        {
+          "id": "D6",
+          "type": "Diode",
+          "nodes": [
+            "N3",
+            "N4"
+          ],
+          "ron": 0.001,
+          "roff": 1000000
+        },
+        {
+          "id": "C7",
+          "type": "Capacitor",
+          "nodes": [
+            "N4",
+            "GND"
+          ],
+          "value": 0.00021999999999999998,
+          "v0": 48
+        },
+        {
+          "id": "R8",
+          "type": "Resistor",
+          "nodes": [
+            "N4",
+            "GND"
+          ],
+          "value": 25
+        }
+      ],
+      "control": {
+        "M3": {
+          "type": "pwm",
+          "freq": 5000,
+          "duty": 50,
+          "phase": 0
+        }
+      },
+      "window": {
+        "t_start": 0,
+        "t_end": 0.1
+      }
+    }
+  },
+  "half_wave": {
+    "name": "half_wave",
+    "payload_template": {
+      "simulation": {
+        "t_end": 0.2,
+        "dt": 0.0002,
+        "cycle_count": 10
+      },
+      "components": [
+        {
+          "id": "V_ac1",
+          "type": "V_AC",
+          "nodes": [
+            "N1",
+            "GND"
+          ],
+          "amplitude": 325,
+          "freq": 50,
+          "phase": 0,
+          "phase_unit": "rad"
+        },
+        {
+          "id": "D2",
+          "type": "Diode",
+          "nodes": [
+            "N1",
+            "N2"
+          ],
+          "ron": 0.001,
+          "roff": 1000000
+        },
+        {
+          "id": "L3",
+          "type": "Inductor",
+          "nodes": [
+            "N2",
+            "N3"
+          ],
+          "value": 0.045
+        },
+        {
+          "id": "R4",
+          "type": "Resistor",
+          "nodes": [
+            "N3",
+            "GND"
+          ],
+          "value": 20
+        }
+      ],
+      "control": {},
+      "window": {
+        "t_start": 0,
+        "t_end": 0.1
+      }
+    }
+  },
+  "half_wave_scr": {
+    "name": "half_wave_scr",
+    "payload_template": {
+      "simulation": {
+        "t_end": 0.2,
+        "dt": 0.0002,
+        "cycle_count": 10
+      },
+      "components": [
+        {
+          "id": "V_ac1",
+          "type": "V_AC",
+          "nodes": [
+            "N1",
+            "GND"
+          ],
+          "amplitude": 325,
+          "freq": 50,
+          "phase": 0,
+          "phase_unit": "rad"
+        },
+        {
+          "id": "T2",
+          "type": "Thyristor",
+          "nodes": [
+            "N1",
+            "N2"
+          ],
+          "ron": 0.001,
+          "roff": 1000000
+        },
+        {
+          "id": "L3",
+          "type": "Inductor",
+          "nodes": [
+            "N2",
+            "N3"
+          ],
+          "value": 0.045
+        },
+        {
+          "id": "R4",
+          "type": "Resistor",
+          "nodes": [
+            "N3",
+            "GND"
+          ],
+          "value": 20
+        }
+      ],
+      "control": {
+        "T2": {
+          "type": "pulse",
+          "delay_angle": 45,
+          "width": 25,
+          "freq": 50
+        }
+      },
+      "window": {
+        "t_start": 0,
+        "t_end": 0.1
+      }
+    }
+  },
+  "full_bridge_diode": {
+    "name": "full_bridge_diode",
+    "payload_template": {
+      "simulation": {
+        "t_end": 0.2,
+        "dt": 0.0002,
+        "cycle_count": 10
+      },
+      "components": [
+        {
+          "id": "V_ac1",
+          "type": "V_AC",
+          "nodes": [
+            "N1",
+            "N2"
+          ],
+          "amplitude": 325,
+          "freq": 50,
+          "phase": 0,
+          "phase_unit": "rad"
+        },
+        {
+          "id": "D2",
+          "type": "Diode",
+          "nodes": [
+            "N1",
+            "N3"
+          ],
+          "ron": 0.001,
+          "roff": 1000000
+        },
+        {
+          "id": "D3",
+          "type": "Diode",
+          "nodes": [
+            "GND",
+            "N1"
+          ],
+          "ron": 0.001,
+          "roff": 1000000
+        },
+        {
+          "id": "D4",
+          "type": "Diode",
+          "nodes": [
+            "N2",
+            "N3"
+          ],
+          "ron": 0.001,
+          "roff": 1000000
+        },
+        {
+          "id": "D5",
+          "type": "Diode",
+          "nodes": [
+            "GND",
+            "N2"
+          ],
+          "ron": 0.001,
+          "roff": 1000000
+        },
+        {
+          "id": "L12",
+          "type": "Inductor",
+          "nodes": [
+            "N3",
+            "N4"
+          ],
+          "value": 0.045
+        },
+        {
+          "id": "R13",
+          "type": "Resistor",
+          "nodes": [
+            "N4",
+            "GND"
+          ],
+          "value": 20
+        }
+      ],
+      "control": {},
+      "window": {
+        "t_start": 0,
+        "t_end": 0.1
+      }
+    }
+  },
+  "full_bridge_thyristor": {
+    "name": "full_bridge_thyristor",
+    "payload_template": {
+      "simulation": {
+        "t_end": 0.2,
+        "dt": 0.0002,
+        "cycle_count": 10
+      },
+      "components": [
+        {
+          "id": "V_ac1",
+          "type": "V_AC",
+          "nodes": [
+            "N1",
+            "N2"
+          ],
+          "amplitude": 325,
+          "freq": 50,
+          "phase": 0,
+          "phase_unit": "rad"
+        },
+        {
+          "id": "T2",
+          "type": "Thyristor",
+          "nodes": [
+            "N1",
+            "N3"
+          ],
+          "ron": 0.001,
+          "roff": 1000000
+        },
+        {
+          "id": "T3",
+          "type": "Thyristor",
+          "nodes": [
+            "GND",
+            "N1"
+          ],
+          "ron": 0.001,
+          "roff": 1000000
+        },
+        {
+          "id": "T4",
+          "type": "Thyristor",
+          "nodes": [
+            "N2",
+            "N3"
+          ],
+          "ron": 0.001,
+          "roff": 1000000
+        },
+        {
+          "id": "T5",
+          "type": "Thyristor",
+          "nodes": [
+            "GND",
+            "N2"
+          ],
+          "ron": 0.001,
+          "roff": 1000000
+        },
+        {
+          "id": "L12",
+          "type": "Inductor",
+          "nodes": [
+            "N3",
+            "N4"
+          ],
+          "value": 0.045
+        },
+        {
+          "id": "R13",
+          "type": "Resistor",
+          "nodes": [
+            "N4",
+            "GND"
+          ],
+          "value": 20
+        }
+      ],
+      "control": {
+        "T2": {
+          "type": "pulse",
+          "delay_angle": 45,
+          "width": 20,
+          "freq": 50
+        },
+        "T3": {
+          "type": "pulse",
+          "delay_angle": 225,
+          "width": 20,
+          "freq": 50
+        },
+        "T4": {
+          "type": "pulse",
+          "delay_angle": 225,
+          "width": 20,
+          "freq": 50
+        },
+        "T5": {
+          "type": "pulse",
+          "delay_angle": 45,
+          "width": 20,
+          "freq": 50
+        }
+      },
+      "window": {
+        "t_start": 0,
+        "t_end": 0.1
+      }
+    }
+  },
+  "semi_converter": {
+    "name": "semi_converter",
+    "payload_template": {
+      "simulation": {
+        "t_end": 0.2,
+        "dt": 0.0002,
+        "cycle_count": 10
+      },
+      "components": [
+        {
+          "id": "V_ac1",
+          "type": "V_AC",
+          "nodes": [
+            "N1",
+            "N2"
+          ],
+          "amplitude": 325,
+          "freq": 50,
+          "phase": 0,
+          "phase_unit": "rad"
+        },
+        {
+          "id": "T2",
+          "type": "Thyristor",
+          "nodes": [
+            "N1",
+            "N3"
+          ],
+          "ron": 0.001,
+          "roff": 1000000
+        },
+        {
+          "id": "D3",
+          "type": "Diode",
+          "nodes": [
+            "GND",
+            "N1"
+          ],
+          "ron": 0.001,
+          "roff": 1000000
+        },
+        {
+          "id": "T4",
+          "type": "Thyristor",
+          "nodes": [
+            "N2",
+            "N3"
+          ],
+          "ron": 0.001,
+          "roff": 1000000
+        },
+        {
+          "id": "D5",
+          "type": "Diode",
+          "nodes": [
+            "GND",
+            "N2"
+          ],
+          "ron": 0.001,
+          "roff": 1000000
+        },
+        {
+          "id": "D6",
+          "type": "Diode",
+          "nodes": [
+            "GND",
+            "N3"
+          ],
+          "ron": 0.001,
+          "roff": 1000000
+        },
+        {
+          "id": "L15",
+          "type": "Inductor",
+          "nodes": [
+            "N3",
+            "N4"
+          ],
+          "value": 0.045
+        },
+        {
+          "id": "R16",
+          "type": "Resistor",
+          "nodes": [
+            "N4",
+            "GND"
+          ],
+          "value": 20
+        }
+      ],
+      "control": {
+        "T2": {
+          "type": "pulse",
+          "delay_angle": 45,
+          "width": 25,
+          "freq": 50
+        },
+        "T4": {
+          "type": "pulse",
+          "delay_angle": 225,
+          "width": 25,
+          "freq": 50
+        }
+      },
+      "window": {
+        "t_start": 0,
+        "t_end": 0.1
+      }
+    }
+  },
+  "three_phase_bridge_diode": {
+    "name": "three_phase_bridge_diode",
+    "payload_template": {
+      "simulation": {
+        "t_end": 0.2,
+        "dt": 0.0002,
+        "cycle_count": 10
+      },
+      "components": [
+        {
+          "id": "V_ac1",
+          "type": "V_AC",
+          "nodes": [
+            "N1",
+            "N2"
+          ],
+          "amplitude": 325,
+          "freq": 50,
+          "phase": 0,
+          "phase_unit": "rad"
+        },
+        {
+          "id": "V_ac2",
+          "type": "V_AC",
+          "nodes": [
+            "N3",
+            "N2"
+          ],
+          "amplitude": 325,
+          "freq": 50,
+          "phase": -2.0943951023931953,
+          "phase_unit": "rad"
+        },
+        {
+          "id": "V_ac3",
+          "type": "V_AC",
+          "nodes": [
+            "N4",
+            "N2"
+          ],
+          "amplitude": 325,
+          "freq": 50,
+          "phase": 2.0943951023931953,
+          "phase_unit": "rad"
+        },
+        {
+          "id": "D7",
+          "type": "Diode",
+          "nodes": [
+            "N1",
+            "N5"
+          ],
+          "ron": 0.001,
+          "roff": 1000000
+        },
+        {
+          "id": "D8",
+          "type": "Diode",
+          "nodes": [
+            "N3",
+            "N5"
+          ],
+          "ron": 0.001,
+          "roff": 1000000
+        },
+        {
+          "id": "D9",
+          "type": "Diode",
+          "nodes": [
+            "N4",
+            "N5"
+          ],
+          "ron": 0.001,
+          "roff": 1000000
+        },
+        {
+          "id": "D10",
+          "type": "Diode",
+          "nodes": [
+            "GND",
+            "N1"
+          ],
+          "ron": 0.001,
+          "roff": 1000000
+        },
+        {
+          "id": "D11",
+          "type": "Diode",
+          "nodes": [
+            "GND",
+            "N3"
+          ],
+          "ron": 0.001,
+          "roff": 1000000
+        },
+        {
+          "id": "D12",
+          "type": "Diode",
+          "nodes": [
+            "GND",
+            "N4"
+          ],
+          "ron": 0.001,
+          "roff": 1000000
+        },
+        {
+          "id": "L19",
+          "type": "Inductor",
+          "nodes": [
+            "N5",
+            "N6"
+          ],
+          "value": 0.03
+        },
+        {
+          "id": "R20",
+          "type": "Resistor",
+          "nodes": [
+            "N6",
+            "GND"
+          ],
+          "value": 25
+        }
+      ],
+      "control": {},
+      "window": {
+        "t_start": 0,
+        "t_end": 0.1
+      }
+    }
+  },
+  "three_phase_bridge_scr": {
+    "name": "three_phase_bridge_scr",
+    "payload_template": {
+      "simulation": {
+        "t_end": 0.2,
+        "dt": 0.0002,
+        "cycle_count": 10
+      },
+      "components": [
+        {
+          "id": "V_ac1",
+          "type": "V_AC",
+          "nodes": [
+            "N1",
+            "N2"
+          ],
+          "amplitude": 325,
+          "freq": 50,
+          "phase": 0,
+          "phase_unit": "rad"
+        },
+        {
+          "id": "V_ac2",
+          "type": "V_AC",
+          "nodes": [
+            "N3",
+            "N2"
+          ],
+          "amplitude": 325,
+          "freq": 50,
+          "phase": -2.0943951023931953,
+          "phase_unit": "rad"
+        },
+        {
+          "id": "V_ac3",
+          "type": "V_AC",
+          "nodes": [
+            "N4",
+            "N2"
+          ],
+          "amplitude": 325,
+          "freq": 50,
+          "phase": 2.0943951023931953,
+          "phase_unit": "rad"
+        },
+        {
+          "id": "T7",
+          "type": "Thyristor",
+          "nodes": [
+            "N1",
+            "N5"
+          ],
+          "ron": 0.001,
+          "roff": 1000000
+        },
+        {
+          "id": "T8",
+          "type": "Thyristor",
+          "nodes": [
+            "N3",
+            "N5"
+          ],
+          "ron": 0.001,
+          "roff": 1000000
+        },
+        {
+          "id": "T9",
+          "type": "Thyristor",
+          "nodes": [
+            "N4",
+            "N5"
+          ],
+          "ron": 0.001,
+          "roff": 1000000
+        },
+        {
+          "id": "T10",
+          "type": "Thyristor",
+          "nodes": [
+            "GND",
+            "N1"
+          ],
+          "ron": 0.001,
+          "roff": 1000000
+        },
+        {
+          "id": "T11",
+          "type": "Thyristor",
+          "nodes": [
+            "GND",
+            "N3"
+          ],
+          "ron": 0.001,
+          "roff": 1000000
+        },
+        {
+          "id": "T12",
+          "type": "Thyristor",
+          "nodes": [
+            "GND",
+            "N4"
+          ],
+          "ron": 0.001,
+          "roff": 1000000
+        },
+        {
+          "id": "L19",
+          "type": "Inductor",
+          "nodes": [
+            "N5",
+            "N6"
+          ],
+          "value": 0.045
+        },
+        {
+          "id": "R20",
+          "type": "Resistor",
+          "nodes": [
+            "N6",
+            "GND"
+          ],
+          "value": 20
+        }
+      ],
+      "control": {
+        "T7": {
+          "type": "pulse",
+          "delay_angle": 60,
+          "width": 60,
+          "freq": 50
+        },
+        "T8": {
+          "type": "pulse",
+          "delay_angle": 180,
+          "width": 60,
+          "freq": 50
+        },
+        "T9": {
+          "type": "pulse",
+          "delay_angle": 300,
+          "width": 60,
+          "freq": 50
+        },
+        "T10": {
+          "type": "pulse",
+          "delay_angle": 240,
+          "width": 60,
+          "freq": 50
+        },
+        "T11": {
+          "type": "pulse",
+          "delay_angle": 0,
+          "width": 60,
+          "freq": 50
+        },
+        "T12": {
+          "type": "pulse",
+          "delay_angle": 120,
+          "width": 60,
+          "freq": 50
+        }
+      },
+      "window": {
+        "t_start": 0,
+        "t_end": 0.1
+      }
+    }
+  },
+  "three_phase_half_wave_diode": {
+    "name": "three_phase_half_wave_diode",
+    "payload_template": {
+      "simulation": {
+        "t_end": 0.2,
+        "dt": 0.0002,
+        "cycle_count": 10
+      },
+      "components": [
+        {
+          "id": "V_ac1",
+          "type": "V_AC",
+          "nodes": [
+            "N1",
+            "GND"
+          ],
+          "amplitude": 325,
+          "freq": 50,
+          "phase": 0,
+          "phase_unit": "rad"
+        },
+        {
+          "id": "V_ac2",
+          "type": "V_AC",
+          "nodes": [
+            "N2",
+            "GND"
+          ],
+          "amplitude": 325,
+          "freq": 50,
+          "phase": -2.0943951023931953,
+          "phase_unit": "rad"
+        },
+        {
+          "id": "V_ac3",
+          "type": "V_AC",
+          "nodes": [
+            "N3",
+            "GND"
+          ],
+          "amplitude": 325,
+          "freq": 50,
+          "phase": 2.0943951023931953,
+          "phase_unit": "rad"
+        },
+        {
+          "id": "D4",
+          "type": "Diode",
+          "nodes": [
+            "N1",
+            "N4"
+          ],
+          "ron": 0.001,
+          "roff": 1000000
+        },
+        {
+          "id": "D5",
+          "type": "Diode",
+          "nodes": [
+            "N2",
+            "N4"
+          ],
+          "ron": 0.001,
+          "roff": 1000000
+        },
+        {
+          "id": "D6",
+          "type": "Diode",
+          "nodes": [
+            "N3",
+            "N4"
+          ],
+          "ron": 0.001,
+          "roff": 1000000
+        },
+        {
+          "id": "L10",
+          "type": "Inductor",
+          "nodes": [
+            "N4",
+            "N5"
+          ],
+          "value": 0.03
+        },
+        {
+          "id": "R11",
+          "type": "Resistor",
+          "nodes": [
+            "N5",
+            "GND"
+          ],
+          "value": 20
+        }
+      ],
+      "control": {},
+      "window": {
+        "t_start": 0,
+        "t_end": 0.1
+      }
+    }
+  },
+  "three_phase_half_wave_scr": {
+    "name": "three_phase_half_wave_scr",
+    "payload_template": {
+      "simulation": {
+        "t_end": 0.2,
+        "dt": 0.0002,
+        "cycle_count": 10
+      },
+      "components": [
+        {
+          "id": "V_ac1",
+          "type": "V_AC",
+          "nodes": [
+            "N1",
+            "GND"
+          ],
+          "amplitude": 325,
+          "freq": 50,
+          "phase": 0,
+          "phase_unit": "rad"
+        },
+        {
+          "id": "V_ac2",
+          "type": "V_AC",
+          "nodes": [
+            "N2",
+            "GND"
+          ],
+          "amplitude": 325,
+          "freq": 50,
+          "phase": -2.0943951023931953,
+          "phase_unit": "rad"
+        },
+        {
+          "id": "V_ac3",
+          "type": "V_AC",
+          "nodes": [
+            "N3",
+            "GND"
+          ],
+          "amplitude": 325,
+          "freq": 50,
+          "phase": 2.0943951023931953,
+          "phase_unit": "rad"
+        },
+        {
+          "id": "T4",
+          "type": "Thyristor",
+          "nodes": [
+            "N1",
+            "N4"
+          ],
+          "ron": 0.001,
+          "roff": 1000000
+        },
+        {
+          "id": "T5",
+          "type": "Thyristor",
+          "nodes": [
+            "N2",
+            "N4"
+          ],
+          "ron": 0.001,
+          "roff": 1000000
+        },
+        {
+          "id": "T6",
+          "type": "Thyristor",
+          "nodes": [
+            "N3",
+            "N4"
+          ],
+          "ron": 0.001,
+          "roff": 1000000
+        },
+        {
+          "id": "L10",
+          "type": "Inductor",
+          "nodes": [
+            "N4",
+            "N5"
+          ],
+          "value": 0.03
+        },
+        {
+          "id": "R11",
+          "type": "Resistor",
+          "nodes": [
+            "N5",
+            "GND"
+          ],
+          "value": 20
+        }
+      ],
+      "control": {
+        "T4": {
+          "type": "pulse",
+          "delay_angle": 60,
+          "width": 120,
+          "freq": 50
+        },
+        "T5": {
+          "type": "pulse",
+          "delay_angle": 180,
+          "width": 120,
+          "freq": 50
+        },
+        "T6": {
+          "type": "pulse",
+          "delay_angle": 300,
+          "width": 120,
+          "freq": 50
+        }
+      },
+      "window": {
+        "t_start": 0,
+        "t_end": 0.1
+      }
+    }
+  },
+  "three_phase_semi_converter": {
+    "name": "three_phase_semi_converter",
+    "payload_template": {
+      "simulation": {
+        "t_end": 0.2,
+        "dt": 0.0002,
+        "cycle_count": 10
+      },
+      "components": [
+        {
+          "id": "V_ac1",
+          "type": "V_AC",
+          "nodes": [
+            "N1",
+            "N2"
+          ],
+          "amplitude": 325,
+          "freq": 50,
+          "phase": 0,
+          "phase_unit": "rad"
+        },
+        {
+          "id": "V_ac2",
+          "type": "V_AC",
+          "nodes": [
+            "N3",
+            "N2"
+          ],
+          "amplitude": 325,
+          "freq": 50,
+          "phase": -2.0943951023931953,
+          "phase_unit": "rad"
+        },
+        {
+          "id": "V_ac3",
+          "type": "V_AC",
+          "nodes": [
+            "N4",
+            "N2"
+          ],
+          "amplitude": 325,
+          "freq": 50,
+          "phase": 2.0943951023931953,
+          "phase_unit": "rad"
+        },
+        {
+          "id": "T7",
+          "type": "Thyristor",
+          "nodes": [
+            "N1",
+            "N5"
+          ],
+          "ron": 0.001,
+          "roff": 1000000
+        },
+        {
+          "id": "T8",
+          "type": "Thyristor",
+          "nodes": [
+            "N3",
+            "N5"
+          ],
+          "ron": 0.001,
+          "roff": 1000000
+        },
+        {
+          "id": "T9",
+          "type": "Thyristor",
+          "nodes": [
+            "N4",
+            "N5"
+          ],
+          "ron": 0.001,
+          "roff": 1000000
+        },
+        {
+          "id": "D10",
+          "type": "Diode",
+          "nodes": [
+            "GND",
+            "N1"
+          ],
+          "ron": 0.001,
+          "roff": 1000000
+        },
+        {
+          "id": "D11",
+          "type": "Diode",
+          "nodes": [
+            "GND",
+            "N3"
+          ],
+          "ron": 0.001,
+          "roff": 1000000
+        },
+        {
+          "id": "D12",
+          "type": "Diode",
+          "nodes": [
+            "GND",
+            "N4"
+          ],
+          "ron": 0.001,
+          "roff": 1000000
+        },
+        {
+          "id": "D13",
+          "type": "Diode",
+          "nodes": [
+            "GND",
+            "N5"
+          ],
+          "ron": 0.001,
+          "roff": 1000000
+        },
+        {
+          "id": "L22",
+          "type": "Inductor",
+          "nodes": [
+            "N5",
+            "N6"
+          ],
+          "value": 0.03
+        },
+        {
+          "id": "R23",
+          "type": "Resistor",
+          "nodes": [
+            "N6",
+            "GND"
+          ],
+          "value": 20
+        }
+      ],
+      "control": {
+        "T7": {
+          "type": "pulse",
+          "delay_angle": 60,
+          "width": 60,
+          "freq": 50
+        },
+        "T8": {
+          "type": "pulse",
+          "delay_angle": 180,
+          "width": 60,
+          "freq": 50
+        },
+        "T9": {
+          "type": "pulse",
+          "delay_angle": 300,
+          "width": 60,
+          "freq": 50
+        }
+      },
+      "window": {
+        "t_start": 0,
+        "t_end": 0.1
+      }
+    }
+  },
+  "h_bridge_inverter": {
+    "name": "h_bridge_inverter",
+    "payload_template": {
+      "simulation": {
+        "t_end": 0.2,
+        "dt": 0.0002,
+        "cycle_count": 10
+      },
+      "components": [
+        {
+          "id": "V_dc1",
+          "type": "V_DC",
+          "nodes": [
+            "N1",
+            "GND"
+          ],
+          "value": 300
+        },
+        {
+          "id": "M2",
+          "type": "MOSFET",
+          "nodes": [
+            "N1",
+            "N2"
+          ],
+          "ron": 0.005,
+          "roff": 1000000,
+          "body_diode": true
+        },
+        {
+          "id": "M3",
+          "type": "MOSFET",
+          "nodes": [
+            "N2",
+            "GND"
+          ],
+          "ron": 0.005,
+          "roff": 1000000,
+          "body_diode": true
+        },
+        {
+          "id": "M4",
+          "type": "MOSFET",
+          "nodes": [
+            "N1",
+            "N3"
+          ],
+          "ron": 0.005,
+          "roff": 1000000,
+          "body_diode": true
+        },
+        {
+          "id": "M5",
+          "type": "MOSFET",
+          "nodes": [
+            "N3",
+            "GND"
+          ],
+          "ron": 0.005,
+          "roff": 1000000,
+          "body_diode": true
+        },
+        {
+          "id": "L10",
+          "type": "Inductor",
+          "nodes": [
+            "N2",
+            "N4"
+          ],
+          "value": 0.015
+        },
+        {
+          "id": "R11",
+          "type": "Resistor",
+          "nodes": [
+            "N4",
+            "N3"
+          ],
+          "value": 10
+        }
+      ],
+      "control": {
+        "M2": {
+          "type": "pwm",
+          "freq": 50,
+          "duty": 50,
+          "phase": 0
+        },
+        "M3": {
+          "type": "pwm",
+          "freq": 50,
+          "duty": 50,
+          "phase": 180
+        },
+        "M4": {
+          "type": "pwm",
+          "freq": 50,
+          "duty": 50,
+          "phase": 180
+        },
+        "M5": {
+          "type": "pwm",
+          "freq": 50,
+          "duty": 50,
+          "phase": 0
+        }
+      },
+      "window": {
+        "t_start": 0,
+        "t_end": 0.1
+      }
+    }
+  },
+  "three_phase_inverter": {
+    "name": "three_phase_inverter",
+    "payload_template": {
+      "simulation": {
+        "t_end": 0.2,
+        "dt": 0.0002,
+        "cycle_count": 10
+      },
+      "components": [
+        {
+          "id": "V_dc1",
+          "type": "V_DC",
+          "nodes": [
+            "N1",
+            "GND"
+          ],
+          "value": 300
+        },
+        {
+          "id": "M2",
+          "type": "MOSFET",
+          "nodes": [
+            "N1",
+            "N2"
+          ],
+          "ron": 0.005,
+          "roff": 1000000,
+          "body_diode": true
+        },
+        {
+          "id": "M3",
+          "type": "MOSFET",
+          "nodes": [
+            "N2",
+            "GND"
+          ],
+          "ron": 0.005,
+          "roff": 1000000,
+          "body_diode": true
+        },
+        {
+          "id": "M4",
+          "type": "MOSFET",
+          "nodes": [
+            "N1",
+            "N3"
+          ],
+          "ron": 0.005,
+          "roff": 1000000,
+          "body_diode": true
+        },
+        {
+          "id": "M5",
+          "type": "MOSFET",
+          "nodes": [
+            "N3",
+            "GND"
+          ],
+          "ron": 0.005,
+          "roff": 1000000,
+          "body_diode": true
+        },
+        {
+          "id": "M6",
+          "type": "MOSFET",
+          "nodes": [
+            "N1",
+            "N4"
+          ],
+          "ron": 0.005,
+          "roff": 1000000,
+          "body_diode": true
+        },
+        {
+          "id": "M7",
+          "type": "MOSFET",
+          "nodes": [
+            "N4",
+            "GND"
+          ],
+          "ron": 0.005,
+          "roff": 1000000,
+          "body_diode": true
+        },
+        {
+          "id": "R15",
+          "type": "Resistor",
+          "nodes": [
+            "N2",
+            "N5"
+          ],
+          "value": 15
+        },
+        {
+          "id": "R17",
+          "type": "Resistor",
+          "nodes": [
+            "N3",
+            "N5"
+          ],
+          "value": 15
+        },
+        {
+          "id": "R19",
+          "type": "Resistor",
+          "nodes": [
+            "N4",
+            "N5"
+          ],
+          "value": 15
+        }
+      ],
+      "control": {
+        "M2": {
+          "type": "pwm",
+          "freq": 50,
+          "duty": 50,
+          "phase": 0
+        },
+        "M3": {
+          "type": "pwm",
+          "freq": 50,
+          "duty": 50,
+          "phase": 180
+        },
+        "M4": {
+          "type": "pwm",
+          "freq": 50,
+          "duty": 50,
+          "phase": 120
+        },
+        "M5": {
+          "type": "pwm",
+          "freq": 50,
+          "duty": 50,
+          "phase": 300
+        },
+        "M6": {
+          "type": "pwm",
+          "freq": 50,
+          "duty": 50,
+          "phase": 240
+        },
+        "M7": {
+          "type": "pwm",
+          "freq": 50,
+          "duty": 50,
+          "phase": 60
+        }
+      },
+      "window": {
+        "t_start": 0,
+        "t_end": 0.1
+      }
+    }
+  },
+  "inverter_leg": {
+    "name": "inverter_leg",
+    "payload_template": {
+      "simulation": {
+        "t_end": 0.2,
+        "dt": 0.0002,
+        "cycle_count": 10
+      },
+      "components": [
+        {
+          "id": "V_dc1",
+          "type": "V_DC",
+          "nodes": [
+            "N1",
+            "GND"
+          ],
+          "value": 300
+        },
+        {
+          "id": "M2",
+          "type": "MOSFET",
+          "nodes": [
+            "N1",
+            "N2"
+          ],
+          "ron": 0.005,
+          "roff": 1000000,
+          "body_diode": true
+        },
+        {
+          "id": "M3",
+          "type": "MOSFET",
+          "nodes": [
+            "N2",
+            "GND"
+          ],
+          "ron": 0.005,
+          "roff": 1000000,
+          "body_diode": true
+        },
+        {
+          "id": "R6",
+          "type": "Resistor",
+          "nodes": [
+            "N2",
+            "N3"
+          ],
+          "value": 20
+        }
+      ],
+      "control": {
+        "M2": {
+          "type": "pwm",
+          "freq": 50,
+          "duty": 50,
+          "phase": 0
+        },
+        "M3": {
+          "type": "pwm",
+          "freq": 50,
+          "duty": 50,
+          "phase": 180
+        }
+      },
+      "window": {
+        "t_start": 0,
+        "t_end": 0.1
+      }
+    }
+  }
+}

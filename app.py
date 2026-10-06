@@ -4,6 +4,7 @@ from pydantic import BaseModel
 import uvicorn
 import math
 import numpy as np
+from typing import Optional
 from core.parser import build_from_json
 
 app = FastAPI()
@@ -57,9 +58,9 @@ def simulate(req: SimulationRequest):
                 
                 # Full bridge
                 { "type": "Thyristor", "id": "T1", "nodes": ["n_a", "dc_p"] },
-                { "type": "Thyristor", "id": "T4", "nodes": ["n_a", "gnd"] },
+                { "type": "Thyristor", "id": "T4", "nodes": ["gnd", "n_a"] },
                 { "type": "Thyristor", "id": "T3", "nodes": ["n_b", "dc_p"] },
-                { "type": "Thyristor", "id": "T2", "nodes": ["n_b", "gnd"] },
+                { "type": "Thyristor", "id": "T2", "nodes": ["gnd", "n_b"] },
                 
                 # Load (R and L in series). If L=0, just use small L or pure R.
                 { "type": "Inductor", "id": "L1", "nodes": ["dc_p", "load_mid"], "value": max(req.l_val, 1e-6) },
@@ -98,6 +99,7 @@ def simulate(req: SimulationRequest):
 
 class CustomSimulationRequest(BaseModel):
     circuit_json: dict
+    window: Optional[dict] = None
 
 def compute_circuit_stats(nodes, branch_i, branch_v, branch_p, idx=slice(None)):
     stats = {}
@@ -152,8 +154,47 @@ def simulate_custom(req: CustomSimulationRequest):
     try:
         sim, sim_params = build_from_json(req.circuit_json)
         
-        t_end = float(sim_params.get('t_end', 0.04))
-        dt = float(sim_params.get('dt', 1e-5))
+        t_end_val = sim_params.get('t_end', req.circuit_json.get('t_end', 0.04))
+        try:
+            t_end = float(t_end_val)
+            if t_end <= 0:
+                t_end = 0.04
+        except (ValueError, TypeError):
+            t_end = 0.04
+
+        dt_val = sim_params.get('dt', req.circuit_json.get('dt', 1e-5))
+        try:
+            dt = float(dt_val)
+            if dt <= 0:
+                dt = 1e-5
+        except (ValueError, TypeError):
+            dt = 1e-5
+
+        # Check for window parameter in simulation config, circuit_json root, or request root
+        window_cfg = (
+            sim_params.get('window')
+            or req.circuit_json.get('window')
+            or (req.window if hasattr(req, 'window') else None)
+        )
+
+        # Auto-extend simulation duration if requested window end time exceeds t_end
+        if window_cfg and isinstance(window_cfg, dict):
+            win_end_val = window_cfg.get('t_end', window_cfg.get('end'))
+            if win_end_val is not None:
+                try:
+                    win_end_float = float(win_end_val)
+                    if win_end_float > t_end:
+                        t_end = win_end_float
+                except (ValueError, TypeError):
+                    pass
+            elif 'duration' in window_cfg:
+                try:
+                    win_dur = float(window_cfg['duration'])
+                    win_start = float(window_cfg.get('t_start', window_cfg.get('start', 0.0)))
+                    if (win_start + win_dur) > t_end:
+                        t_end = win_start + win_dur
+                except (ValueError, TypeError):
+                    pass
         
         gate_signals_map = req.circuit_json.get("control", {})
 
@@ -242,6 +283,38 @@ def simulate_custom(req: CustomSimulationRequest):
         stats_steady = compute_circuit_stats(results['nodes'], results['branch_i'], results['branch_v'], results['branch_p'], idx_steady)
         stats_transient = compute_circuit_stats(results['nodes'], results['branch_i'], results['branch_v'], results['branch_p'], slice(None))
 
+        # Compute window statistics if window configuration was provided
+        stats_window = None
+        window_info = None
+        if window_cfg and isinstance(window_cfg, dict):
+            try:
+                t_start = float(window_cfg.get('t_start', window_cfg.get('start', 0.0)))
+                t_end_w = window_cfg.get('t_end', window_cfg.get('end'))
+                if t_end_w is None and 'duration' in window_cfg:
+                    t_end_w = t_start + float(window_cfg['duration'])
+                elif t_end_w is None:
+                    t_end_w = t_end
+                else:
+                    t_end_w = float(t_end_w)
+
+                if t_end_w < t_start:
+                    t_start, t_end_w = t_end_w, t_start
+
+                idx_window = np.where((time_arr >= t_start - 1e-9) & (time_arr <= t_end_w + 1e-9))[0]
+                if len(idx_window) == 0:
+                    idx_window = slice(None)
+
+                stats_window = compute_circuit_stats(
+                    results['nodes'], results['branch_i'], results['branch_v'], results['branch_p'], idx_window
+                )
+                window_info = {
+                    "t_start": float(t_start),
+                    "t_end": float(t_end_w)
+                }
+            except Exception as w_err:
+                print(f"Warning: Failed to compute stats_window: {w_err}")
+                stats_window = None
+
         json_results = {
             "time": time_arr.tolist(),
             "nodes": {k: v.tolist() for k, v in results['nodes'].items()},
@@ -256,8 +329,12 @@ def simulate_custom(req: CustomSimulationRequest):
             },
             "stats_steady": stats_steady,
             "stats_transient": stats_transient,
+            "stats_window": stats_window,
             "stats": stats_steady
         }
+
+        if window_info is not None:
+            json_results["window"] = window_info
         
         return json_results
         

@@ -58,6 +58,12 @@ let customSimTimeMs = null;
 let lastCursorX = -1;
 let lastCursorHeadY = -1;
 let plotInteractionsSetup = false;
+let isInternalPlotUpdate = false;
+
+// Transient Viewing Window State
+let transientViewDurationMs = null; // null = full timeline, number = duration clamped in ms
+let transientViewStartMs = 0;
+let transientViewEndMs = null;
 
 // Initialize Canvas Sizing
 function resizeCanvas() {
@@ -404,8 +410,8 @@ function renderPlotCursor() {
         view_t0 = t_start_ms;
         view_t1 = t_end_ms;
     } else {
-        view_t0 = 0;
-        view_t1 = total_t_ms;
+        view_t0 = (transientViewStartMs !== null && !isNaN(transientViewStartMs)) ? Math.max(0, transientViewStartMs) : 0;
+        view_t1 = transientViewDurationMs !== null ? Math.min(total_t_ms, Math.max(view_t0 + 0.1, transientViewDurationMs)) : total_t_ms;
     }
 
     if (plotEl && plotEl._fullLayout && plotEl._fullLayout.xaxis && plotEl._fullLayout.xaxis.range) {
@@ -421,8 +427,13 @@ function renderPlotCursor() {
     if (isScrubbed) {
         targetTimeMs = scrubbedTimeMs;
     } else {
-        const cycleSpanMs = Math.max(1e-4, t_end_ms - t_start_ms);
-        targetTimeMs = t_start_ms + (currentCycleAngleDeg / 360.0) * cycleSpanMs;
+        if (graphViewMode === 'steady') {
+            const cycleSpanMs = Math.max(1e-4, t_end_ms - t_start_ms);
+            targetTimeMs = t_start_ms + (currentCycleAngleDeg / 360.0) * cycleSpanMs;
+        } else {
+            const spanMs = Math.max(1e-4, view_t1 - view_t0);
+            targetTimeMs = view_t0 + (currentCycleAngleDeg / 360.0) * spanMs;
+        }
     }
 
     const fraction = (targetTimeMs - view_t0) / Math.max(1e-6, view_t1 - view_t0);
@@ -552,16 +563,292 @@ function setGraphViewMode(mode) {
 function updateViewModeButtons() {
     const btnSteady = document.getElementById('btnViewSteady');
     const btnTransient = document.getElementById('btnViewTransient');
-    if (!btnSteady || !btnTransient) return;
+    if (btnSteady && btnTransient) {
+        if (graphViewMode === 'steady') {
+            btnSteady.className = 'px-2 py-0.5 rounded text-[11px] font-semibold bg-cyan-600/30 text-cyan-300 border border-cyan-500/50 shadow-sm shadow-cyan-500/20 transition flex items-center gap-1';
+            btnTransient.className = 'px-2 py-0.5 rounded text-[11px] text-slate-400 hover:text-slate-200 border border-transparent transition flex items-center gap-1';
+        } else {
+            btnSteady.className = 'px-2 py-0.5 rounded text-[11px] text-slate-400 hover:text-slate-200 border border-transparent transition flex items-center gap-1';
+            btnTransient.className = 'px-2 py-0.5 rounded text-[11px] font-semibold bg-cyan-600/30 text-cyan-300 border border-cyan-500/50 shadow-sm shadow-cyan-500/20 transition flex items-center gap-1';
+        }
+    }
 
-    if (graphViewMode === 'steady') {
-        btnSteady.className = 'px-2 py-0.5 rounded text-[11px] font-semibold bg-cyan-600/30 text-cyan-300 border border-cyan-500/50 shadow-sm shadow-cyan-500/20 transition flex items-center gap-1';
-        btnTransient.className = 'px-2 py-0.5 rounded text-[11px] text-slate-400 hover:text-slate-200 border border-transparent transition flex items-center gap-1';
-    } else {
-        btnSteady.className = 'px-2 py-0.5 rounded text-[11px] text-slate-400 hover:text-slate-200 border border-transparent transition flex items-center gap-1';
-        btnTransient.className = 'px-2 py-0.5 rounded text-[11px] font-semibold bg-cyan-600/30 text-cyan-300 border border-cyan-500/50 shadow-sm shadow-cyan-500/20 transition flex items-center gap-1';
+    const durationBar = document.getElementById('transientDurationBar');
+    if (durationBar) {
+        if (graphViewMode === 'transient') {
+            durationBar.classList.remove('hidden');
+            durationBar.classList.add('flex');
+            syncTransientControlsUI();
+        } else {
+            durationBar.classList.add('hidden');
+            durationBar.classList.remove('flex');
+        }
     }
 }
+
+// -------------------------------------------------------------
+// Transient Viewing Duration Controls
+// -------------------------------------------------------------
+function setTransientViewDuration(val) {
+    if (val === 'all' || val === 'All' || val === null || val === undefined || val === '') {
+        transientViewDurationMs = null;
+        transientViewStartMs = 0;
+        transientViewEndMs = null;
+    } else {
+        const num = parseFloat(val);
+        if (!isNaN(num) && num > 0) {
+            transientViewDurationMs = num;
+            transientViewStartMs = 0;
+            transientViewEndMs = num;
+        } else {
+            return;
+        }
+    }
+
+    // Sync input, slider, and quick preset buttons
+    syncTransientControlsUI();
+
+    // Check if requested duration exceeds total solved simulation duration
+    let totalSimTimeMs = 0;
+    if (lastSimResults && lastSimResults.time && lastSimResults.time.length > 0) {
+        totalSimTimeMs = lastSimResults.time[lastSimResults.time.length - 1] * 1000.0;
+    } else if (customSimTimeMs !== null) {
+        totalSimTimeMs = customSimTimeMs;
+    } else {
+        totalSimTimeMs = simCycles * (simCyclePeriod || 0.02) * 1000.0;
+    }
+
+    if (transientViewDurationMs !== null && transientViewDurationMs > totalSimTimeMs) {
+        customSimTimeMs = transientViewDurationMs;
+        const customOpt = document.getElementById('optCustomCycles');
+        if (customOpt) customOpt.text = `Custom (${transientViewDurationMs.toFixed(0)} ms)`;
+        const simCyclesSelect = document.getElementById('simCyclesSelect');
+        if (simCyclesSelect) simCyclesSelect.value = 'custom';
+
+        clearTimeout(autoSimDebounceTimer);
+        autoSimDebounceTimer = setTimeout(() => {
+            runSimulation(true);
+        }, 150);
+        return;
+    }
+
+    updatePlot();
+    if (lastSimResults) {
+        updateStatsDashboard(lastSimResults);
+    }
+}
+
+function onTransientDurationInput(val) {
+    const num = parseFloat(val);
+    if (!isNaN(num) && num > 0) {
+        const sld = document.getElementById('transientDurationSlider');
+        if (sld && document.activeElement !== sld) {
+            sld.value = num;
+        }
+        setTransientViewDuration(num);
+    } else if (val === '' || val === 'all' || val === 'All') {
+        setTransientViewDuration('all');
+    }
+}
+
+function onTransientDurationSlider(val) {
+    const num = parseFloat(val);
+    if (!isNaN(num) && num > 0) {
+        const inp = document.getElementById('transientDurationInput');
+        if (inp && document.activeElement !== inp) {
+            inp.value = num;
+        }
+        setTransientViewDuration(num);
+    }
+}
+
+function syncTransientControlsUI() {
+    let totalSimTimeMs = 200;
+    if (lastSimResults && lastSimResults.time && lastSimResults.time.length > 0) {
+        totalSimTimeMs = lastSimResults.time[lastSimResults.time.length - 1] * 1000.0;
+    }
+
+    const inp = document.getElementById('transientDurationInput');
+    const sld = document.getElementById('transientDurationSlider');
+
+    const displayVal = transientViewDurationMs !== null ? Math.round(transientViewDurationMs) : Math.round(totalSimTimeMs);
+
+    if (inp && document.activeElement !== inp) {
+        inp.value = transientViewDurationMs !== null ? transientViewDurationMs : '';
+        inp.placeholder = Math.round(totalSimTimeMs);
+    }
+
+    if (sld && document.activeElement !== sld) {
+        if (sld.max && Number(sld.max) < displayVal) {
+            sld.max = Math.max(1000, Math.ceil(displayVal * 1.5 / 50) * 50);
+        }
+        sld.value = displayVal;
+    }
+
+    const readout = document.getElementById('transientDurationReadout');
+    if (readout) {
+        if (transientViewDurationMs === null) {
+            readout.innerText = `All (${Math.round(totalSimTimeMs)} ms)`;
+        } else {
+            readout.innerText = `${Math.round(transientViewDurationMs)} ms`;
+        }
+    }
+
+    updateTransientPresetButtonsUI();
+}
+
+function updateTransientPresetButtonsUI() {
+    const presetMap = {
+        'tbtn-20': 20,
+        'tbtn-50': 50,
+        'tbtn-100': 100,
+        'tbtn-200': 200,
+        'tbtn-all': null,
+        'btnTransient20': 20,
+        'btnTransient50': 50,
+        'btnTransient100': 100,
+        'btnTransient200': 200,
+        'btnTransientAll': null
+    };
+
+    const presetButtons = document.querySelectorAll('.transient-preset-btn, [data-duration]');
+    if (presetButtons && presetButtons.length > 0) {
+        presetButtons.forEach(btn => {
+            const durAttr = btn.getAttribute('data-duration');
+            let isCurrent = false;
+            if (durAttr) {
+                if (durAttr === 'all' || durAttr === 'All') {
+                    isCurrent = (transientViewDurationMs === null);
+                } else {
+                    const durNum = parseFloat(durAttr);
+                    isCurrent = (transientViewDurationMs !== null && Math.abs(transientViewDurationMs - durNum) < 1e-3);
+                }
+            } else if (btn.id && presetMap[btn.id] !== undefined) {
+                const targetVal = presetMap[btn.id];
+                isCurrent = (targetVal === null) ? (transientViewDurationMs === null) : (transientViewDurationMs !== null && Math.abs(transientViewDurationMs - targetVal) < 1e-3);
+            } else {
+                const txt = btn.innerText.trim();
+                if (txt.includes('All') || txt.includes('Full')) {
+                    isCurrent = (transientViewDurationMs === null);
+                } else {
+                    const parsed = parseFloat(txt);
+                    isCurrent = (!isNaN(parsed) && transientViewDurationMs !== null && Math.abs(transientViewDurationMs - parsed) < 1e-3);
+                }
+            }
+
+            if (isCurrent) {
+                btn.classList.add('active');
+                btn.classList.add('bg-cyan-600/30', 'text-cyan-300', 'border-cyan-500/50', 'shadow-sm', 'shadow-cyan-500/20');
+                btn.classList.remove('text-slate-400', 'border-transparent', 'hover:text-slate-200');
+            } else {
+                btn.classList.remove('active');
+                btn.classList.remove('bg-cyan-600/30', 'text-cyan-300', 'border-cyan-500/50', 'shadow-sm', 'shadow-cyan-500/20');
+                btn.classList.add('text-slate-400', 'border-transparent', 'hover:text-slate-200');
+            }
+        });
+    }
+}
+
+function handlePlotlyRelayout(eventData) {
+    if (graphViewMode !== 'transient') return;
+    if (!lastSimResults || !lastSimResults.time || lastSimResults.time.length === 0) return;
+
+    const totalSimTimeMs = lastSimResults.time[lastSimResults.time.length - 1] * 1000.0;
+    let newStart = null;
+    let newEnd = null;
+
+    if (eventData['xaxis.range[0]'] !== undefined && eventData['xaxis.range[1]'] !== undefined) {
+        newStart = Number(eventData['xaxis.range[0]']);
+        newEnd = Number(eventData['xaxis.range[1]']);
+    } else if (Array.isArray(eventData['xaxis.range'])) {
+        newStart = Number(eventData['xaxis.range'][0]);
+        newEnd = Number(eventData['xaxis.range'][1]);
+    } else if (eventData['xaxis.autorange'] === true) {
+        newStart = 0;
+        newEnd = totalSimTimeMs;
+        transientViewDurationMs = null;
+    }
+
+    if (newStart !== null && newEnd !== null && !isNaN(newStart) && !isNaN(newEnd) && newEnd > newStart) {
+        transientViewStartMs = Math.max(0, newStart);
+        transientViewEndMs = Math.min(totalSimTimeMs, newEnd);
+        if (eventData['xaxis.autorange'] !== true) {
+            transientViewDurationMs = Math.max(0.1, transientViewEndMs - transientViewStartMs);
+        }
+        syncTransientControlsUI();
+        if (lastSimResults) {
+            updateStatsDashboard(lastSimResults);
+        }
+    }
+}
+
+window.setTransientViewDuration = setTransientViewDuration;
+window.onTransientDurationInput = onTransientDurationInput;
+window.onTransientDurationSlider = onTransientDurationSlider;
+window.syncTransientControlsUI = syncTransientControlsUI;
+
+function exportTransientDataCSV() {
+    if (!lastSimResults || !lastSimResults.time || lastSimResults.time.length === 0) {
+        alert('No simulation data available to export. Run a simulation first.');
+        return;
+    }
+
+    const times = lastSimResults.time;
+    const totalSimTimeMs = times[times.length - 1] * 1000.0;
+    const v0Ms = (transientViewStartMs !== null && !isNaN(transientViewStartMs)) ? Math.max(0, transientViewStartMs) : 0;
+    const v1Ms = (transientViewEndMs !== null && !isNaN(transientViewEndMs)) ? Math.min(totalSimTimeMs, transientViewEndMs) : (transientViewDurationMs !== null ? Math.min(totalSimTimeMs, transientViewDurationMs) : totalSimTimeMs);
+
+    const v0Sec = v0Ms / 1000.0;
+    const v1Sec = v1Ms / 1000.0;
+
+    const indices = [];
+    for (let i = 0; i < times.length; i++) {
+        if (times[i] >= v0Sec - 1e-9 && times[i] <= v1Sec + 1e-9) {
+            indices.push(i);
+        }
+    }
+
+    if (indices.length === 0) {
+        alert('No data points found within the selected viewing duration.');
+        return;
+    }
+
+    const nodeKeys = lastSimResults.nodes ? Object.keys(lastSimResults.nodes) : [];
+    const branchKeys = lastSimResults.branch_i ? Object.keys(lastSimResults.branch_i) : [];
+
+    let csv = 'Time_s,Time_ms';
+    nodeKeys.forEach(k => { csv += `,V(${k})_V`; });
+    branchKeys.forEach(k => { csv += `,I(${k})_A`; });
+    csv += '\n';
+
+    indices.forEach(idx => {
+        const tSec = times[idx];
+        const tMs = (tSec * 1000.0).toFixed(4);
+        let row = `${tSec.toFixed(7)},${tMs}`;
+
+        nodeKeys.forEach(k => {
+            const arr = lastSimResults.nodes[k];
+            row += `,${arr && arr.length > idx ? arr[idx].toFixed(4) : ''}`;
+        });
+        branchKeys.forEach(k => {
+            const arr = lastSimResults.branch_i[k];
+            row += `,${arr && arr.length > idx ? arr[idx].toFixed(4) : ''}`;
+        });
+        csv += row + '\n';
+    });
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `powersim_transient_${Math.round(v0Ms)}ms_to_${Math.round(v1Ms)}ms.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+}
+
+window.exportTransientDataCSV = exportTransientDataCSV;
 
 function onPlotScrub(timeMs) {
     if (!lastSimResults) return;
@@ -818,12 +1105,19 @@ function getSimulationStepIndex() {
     } else {
         let t_start = 0;
         let t_end = totalSimTime;
-        if (lastSimResults.steady_window && typeof lastSimResults.steady_window.t_start === 'number') {
-            t_start = lastSimResults.steady_window.t_start;
-            t_end = lastSimResults.steady_window.t_end;
+        if (graphViewMode === 'steady') {
+            if (lastSimResults.steady_window && typeof lastSimResults.steady_window.t_start === 'number') {
+                t_start = lastSimResults.steady_window.t_start;
+                t_end = lastSimResults.steady_window.t_end;
+            } else {
+                t_start = Math.max(0, totalSimTime - simCyclePeriod);
+                t_end = totalSimTime;
+            }
         } else {
-            t_start = Math.max(0, totalSimTime - simCyclePeriod);
-            t_end = totalSimTime;
+            const v0 = (transientViewStartMs !== null && !isNaN(transientViewStartMs)) ? Math.max(0, transientViewStartMs) : 0;
+            const v1 = transientViewDurationMs !== null ? Math.min(totalSimTime * 1000.0, Math.max(v0 + 0.1, transientViewDurationMs)) : (totalSimTime * 1000.0);
+            t_start = v0 / 1000.0;
+            t_end = v1 / 1000.0;
         }
         const cyclePeriod = Math.max(1e-6, t_end - t_start);
         targetTimeSec = t_start + (currentCycleAngleDeg / 360.0) * cyclePeriod;
@@ -1369,16 +1663,91 @@ canvas.addEventListener('wheel', (e) => {
 }, { passive: false });
 
 window.addEventListener('keydown', (e) => {
-    if (e.code === 'Space' && !spacePressed) {
-        spacePressed = true;
-        canvas.style.cursor = 'grab';
+    // Skip shortcut processing if user is editing text in an input or textarea
+    const activeTag = document.activeElement ? document.activeElement.tagName : '';
+    if (activeTag === 'INPUT' || activeTag === 'TEXTAREA' || activeTag === 'SELECT') {
+        return;
     }
+
+    if (e.code === 'Space') {
+        if (!spacePressed) {
+            spacePressed = true;
+            canvas.style.cursor = 'grab';
+        }
+        // If scrubbed, space exits scrub and resumes sweep; otherwise toggles play/pause
+        if (scrubbedTimeMs !== null) {
+            resumeSweep();
+        } else if (typeof togglePlayPause === 'function') {
+            togglePlayPause();
+        }
+        e.preventDefault();
+        return;
+    }
+
     if ((e.key === 'r' || e.key === 'R') && selectedComp) {
         rotateSelected();
+        return;
     }
+
     if ((e.key === 'Delete' || e.key === 'Backspace') && selectedComp) {
-        if (document.activeElement.tagName !== 'INPUT') {
-            deleteSelected();
+        deleteSelected();
+        return;
+    }
+
+    // Oscilloscope & Transient Duration Shortcuts
+    if (graphViewMode === 'transient') {
+        if (e.key === '1') {
+            setTransientViewDuration(20);
+        } else if (e.key === '2') {
+            setTransientViewDuration(50);
+        } else if (e.key === '3') {
+            setTransientViewDuration(100);
+        } else if (e.key === '4') {
+            setTransientViewDuration(200);
+        } else if (e.key === '0') {
+            setTransientViewDuration('all');
+        } else if (e.key === '[') {
+            // Step down viewing duration
+            const cur = transientViewDurationMs !== null ? transientViewDurationMs : 200;
+            const presets = [20, 50, 100, 200];
+            let nextVal = presets[0];
+            for (let i = presets.length - 1; i >= 0; i--) {
+                if (presets[i] < cur - 0.5) {
+                    nextVal = presets[i];
+                    break;
+                }
+            }
+            if (cur > 200) nextVal = Math.max(200, cur - 50);
+            setTransientViewDuration(nextVal);
+        } else if (e.key === ']') {
+            // Step up viewing duration
+            const cur = transientViewDurationMs !== null ? transientViewDurationMs : 20;
+            const presets = [20, 50, 100, 200];
+            let nextVal = null;
+            for (let i = 0; i < presets.length; i++) {
+                if (presets[i] > cur + 0.5) {
+                    nextVal = presets[i];
+                    break;
+                }
+            }
+            if (nextVal === null) {
+                nextVal = cur >= 200 ? Math.min(2000, cur + 50) : 'all';
+            }
+            setTransientViewDuration(nextVal);
+        } else if (e.key === 'ArrowLeft') {
+            // Nudge scrubbed time backward
+            e.preventDefault();
+            const totalMs = (lastSimResults && lastSimResults.time && lastSimResults.time.length > 0) ? lastSimResults.time[lastSimResults.time.length - 1] * 1000.0 : 200;
+            const currentMs = (scrubbedTimeMs !== null) ? scrubbedTimeMs : (currentCycleAngleDeg / 360.0) * totalMs;
+            const stepMs = Math.max(0.2, (transientViewDurationMs || totalMs) * 0.01);
+            onPlotScrub(Math.max(0, currentMs - stepMs));
+        } else if (e.key === 'ArrowRight') {
+            // Nudge scrubbed time forward
+            e.preventDefault();
+            const totalMs = (lastSimResults && lastSimResults.time && lastSimResults.time.length > 0) ? lastSimResults.time[lastSimResults.time.length - 1] * 1000.0 : 200;
+            const currentMs = (scrubbedTimeMs !== null) ? scrubbedTimeMs : (currentCycleAngleDeg / 360.0) * totalMs;
+            const stepMs = Math.max(0.2, (transientViewDurationMs || totalMs) * 0.01);
+            onPlotScrub(Math.min(totalMs, currentMs + stepMs));
         }
     }
 });
@@ -1701,6 +2070,9 @@ async function runSimulation(isBackgroundAuto = false) {
     } else {
         t_end = simCycles * (1.0 / maxFreq);
     }
+    if (transientViewDurationMs !== null && (transientViewDurationMs / 1000.0) > t_end) {
+        t_end = transientViewDurationMs / 1000.0;
+    }
 
     let dt = Math.max(1e-5, (1.0 / maxFreq) / 100.0);
     if (maxFreq >= 1000 && dt > (1.0 / maxFreq) / 50.0) {
@@ -1712,6 +2084,14 @@ async function runSimulation(isBackgroundAuto = false) {
         components: [],
         control: {}
     };
+
+    if (transientViewDurationMs !== null) {
+        circuitPayload.window = {
+            t_start: (transientViewStartMs || 0) / 1000.0,
+            t_end: transientViewDurationMs / 1000.0
+        };
+        circuitPayload.simulation.window = circuitPayload.window;
+    }
 
     components.forEach(c => {
         if (c.type === 'Wire') return;
@@ -1826,6 +2206,7 @@ async function runSimulation(isBackgroundAuto = false) {
             }
         }
 
+        syncTransientControlsUI();
         buildChannelToggles();
         updatePlot();
         updateStatsDashboard(data);
@@ -1990,20 +2371,43 @@ function updatePlot() {
     let xAxisConfig = {};
     let plotShapes = [];
 
+    const durationBar = document.getElementById('transientDurationBar');
+    if (durationBar) {
+        if (graphViewMode === 'transient') {
+            durationBar.classList.remove('hidden');
+            durationBar.classList.add('flex');
+            syncTransientControlsUI();
+        } else {
+            durationBar.classList.add('hidden');
+            durationBar.classList.remove('flex');
+        }
+    }
+
     if (graphViewMode === 'steady') {
         xAxisConfig = {
             title: 'Time (ms) [Steady-State Cycle]',
             range: [t_start_ms, t_end_ms],
             autorange: false,
+            rangeslider: { visible: false },
             gridcolor: '#1e293b',
             zerolinecolor: '#334155'
         };
         plotShapes = [];
     } else {
+        const visibleStartMs = (transientViewStartMs !== null && !isNaN(transientViewStartMs)) ? Math.max(0, transientViewStartMs) : 0;
+        const visibleEndMs = transientViewDurationMs !== null ? Math.min(total_t_ms, Math.max(visibleStartMs + 0.1, transientViewDurationMs)) : total_t_ms;
+        transientViewEndMs = visibleEndMs;
+
         xAxisConfig = {
-            title: 'Time (ms) [Full Transient Timeline]',
-            range: [0, total_t_ms],
+            title: 'Time (ms) [Transient Waveform]',
+            range: [visibleStartMs, visibleEndMs],
             autorange: false,
+            rangeslider: {
+                visible: true,
+                bgcolor: '#0b1120',
+                bordercolor: '#1e293b',
+                thickness: 0.08
+            },
             gridcolor: '#1e293b',
             zerolinecolor: '#334155'
         };
@@ -2057,7 +2461,9 @@ function updatePlot() {
         }
     };
 
+    isInternalPlotUpdate = true;
     Plotly.react('plot', traces, layout, { responsive: true, displayModeBar: false }).then(() => {
+        isInternalPlotUpdate = false;
         setupPlotInteractions();
     });
 }
@@ -2072,6 +2478,11 @@ function setupPlotInteractions() {
             if (data && data.points && data.points.length > 0) {
                 onPlotScrub(data.points[0].x);
             }
+        });
+
+        plotEl.on('plotly_relayout', function(eventData) {
+            if (!eventData || isInternalPlotUpdate || graphViewMode !== 'transient') return;
+            handlePlotlyRelayout(eventData);
         });
     }
 
@@ -2125,7 +2536,14 @@ function updateStatsDashboard(data) {
     if (graphViewMode === 'steady') {
         statsObj = data.stats_steady || computeSteadyStatsSlice(data) || data.stats;
     } else {
-        statsObj = data.stats_transient || data.stats;
+        const isCustomWindow = (transientViewDurationMs !== null || transientViewStartMs > 0);
+        if (isCustomWindow) {
+            const startSec = (transientViewStartMs || 0) / 1000.0;
+            const endSec = (transientViewEndMs !== null ? transientViewEndMs : (transientViewDurationMs || 0)) / 1000.0;
+            statsObj = data.stats_window || computeWindowStatsSlice(data, startSec, endSec) || data.stats_transient || data.stats;
+        } else {
+            statsObj = data.stats_transient || data.stats;
+        }
     }
     if (!statsObj) return;
 
@@ -2214,6 +2632,67 @@ function computeSteadyStatsSlice(data) {
     return steadyStats;
 }
 
+function computeWindowStatsSlice(data, startSec, endSec) {
+    if (!data.time || data.time.length === 0) return null;
+    const times = data.time;
+    const totalSimTime = times[times.length - 1];
+    const t0 = Math.max(0, Math.min(totalSimTime, startSec || 0));
+    const t1 = Math.max(t0 + 1e-6, Math.min(totalSimTime, endSec || totalSimTime));
+
+    let sIdx = 0;
+    let low = 0, high = times.length - 1;
+    while (low <= high) {
+        const mid = (low + high) >> 1;
+        if (times[mid] < t0) low = mid + 1;
+        else { sIdx = mid; high = mid - 1; }
+    }
+
+    let eIdx = times.length - 1;
+    low = sIdx;
+    high = times.length - 1;
+    while (low <= high) {
+        const mid = (low + high) >> 1;
+        if (times[mid] <= t1) { eIdx = mid; low = mid + 1; }
+        else high = mid - 1;
+    }
+
+    const count = eIdx - sIdx + 1;
+    if (count <= 1) return null;
+
+    const windowStats = {};
+    if (data.nodes) {
+        for (const [node, arr] of Object.entries(data.nodes)) {
+            let sum = 0, sumSq = 0;
+            for (let i = sIdx; i <= eIdx; i++) {
+                const v = arr[i];
+                sum += v;
+                sumSq += v * v;
+            }
+            const avg = sum / count;
+            const rms = Math.sqrt(sumSq / count);
+            const rf = Math.abs(avg) > 1e-6 ? Math.sqrt(Math.max(0, Math.pow(rms / Math.abs(avg), 2) - 1.0)) : 0;
+            windowStats[`V(${node})`] = { avg, rms, rf };
+        }
+    }
+    if (data.branch_i) {
+        for (const [cid, arr] of Object.entries(data.branch_i)) {
+            let sum = 0, sumSq = 0, sumP = 0;
+            const vArr = (data.branch_v && data.branch_v[cid]) || null;
+            for (let i = sIdx; i <= eIdx; i++) {
+                const cur = arr[i];
+                sum += cur;
+                sumSq += cur * cur;
+                if (vArr && vArr.length > i) sumP += cur * vArr[i];
+            }
+            const avg = sum / count;
+            const rms = Math.sqrt(sumSq / count);
+            const rf = Math.abs(avg) > 1e-6 ? Math.sqrt(Math.max(0, Math.pow(rms / Math.abs(avg), 2) - 1.0)) : 0;
+            windowStats[`I(${cid})`] = { avg, rms, p_avg: sumP / count, rf };
+        }
+    }
+    return windowStats;
+}
+
 function resetStats() {
     ['statAvgV', 'statRmsV', 'statAvgI', 'statRmsI', 'statPower', 'statRF'].forEach(id => {
         document.getElementById(id).innerText = '--';
@@ -2247,18 +2726,22 @@ function loadPreset(name) {
         components.find(c => c.type === 'V_AC').props = { amplitude: 325, freq: 50, phase: 0 };
 
         const t1 = createComponent('Thyristor', { x: ox + 90, y: oy + 90 }, { x: ox + 90, y: oy });
+        t1.id = 'T1';
         t1.props = { delay_angle: 45, width: 20, freq: 50, ron: 0.001, roff: 1e6 };
         components.push(t1);
 
         const t4 = createComponent('Thyristor', { x: ox + 90, y: oy + 240 }, { x: ox + 90, y: oy + 90 });
+        t4.id = 'T4';
         t4.props = { delay_angle: 225, width: 20, freq: 50, ron: 0.001, roff: 1e6 };
         components.push(t4);
 
         const t3 = createComponent('Thyristor', { x: ox + 180, y: oy + 150 }, { x: ox + 180, y: oy });
+        t3.id = 'T3';
         t3.props = { delay_angle: 225, width: 20, freq: 50, ron: 0.001, roff: 1e6 };
         components.push(t3);
 
         const t2 = createComponent('Thyristor', { x: ox + 180, y: oy + 240 }, { x: ox + 180, y: oy + 150 });
+        t2.id = 'T2';
         t2.props = { delay_angle: 45, width: 20, freq: 50, ron: 0.001, roff: 1e6 };
         components.push(t2);
 
