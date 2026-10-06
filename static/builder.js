@@ -48,6 +48,8 @@ let activeChannels = new Set();
 let autoSimDebounceTimer = null;
 let isSimulating = false;
 let hasPendingSimulateRequest = false;
+let simWatchdogTimer = null;
+let runBtnRestoreTimer = null;
 let simCyclePeriod = 0.02; // Cycle period for scrubbing / oscilloscope sync
 
 // Dual-Mode Oscilloscope & Timescale State
@@ -1865,6 +1867,7 @@ function clearCircuit() {
 
     const connStatus = document.getElementById('connectionStatus');
     if (connStatus) connStatus.innerHTML = '<span class="w-2 h-2 rounded-full bg-slate-500 inline-block"></span> Schematic Empty';
+    updateSimStatus('idle', 'Ready');
 }
 
 function renderEmptyPlot() {
@@ -2022,6 +2025,68 @@ function syncParamChange(propKey, value, unit) {
 function updateProp(key, value) {
     if (!selectedComp) return;
     selectedComp.props[key] = value;
+}
+
+// -------------------------------------------------------------
+// Toast Notifications & Simulation Status Badging
+// -------------------------------------------------------------
+function showToast(message, type = 'info') {
+    let container = document.getElementById('toastContainer');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'toastContainer';
+        container.className = 'fixed top-16 right-6 z-50 flex flex-col gap-2 pointer-events-none';
+        document.body.appendChild(container);
+    }
+    const toast = document.createElement('div');
+    let colorClasses = 'bg-slate-900/95 border-cyan-500/80 text-cyan-200';
+    if (type === 'warning') colorClasses = 'bg-amber-950/95 border-amber-500/80 text-amber-200';
+    else if (type === 'error') colorClasses = 'bg-rose-950/95 border-rose-500/80 text-rose-200';
+    else if (type === 'success') colorClasses = 'bg-emerald-950/95 border-emerald-500/80 text-emerald-200';
+
+    toast.className = `px-3.5 py-2 rounded-lg border text-xs font-medium shadow-2xl backdrop-blur-md flex items-center gap-2 transform transition-all duration-300 -translate-y-2 opacity-0 pointer-events-auto ${colorClasses}`;
+    toast.innerHTML = message;
+    container.appendChild(toast);
+
+    requestAnimationFrame(() => {
+        toast.classList.remove('-translate-y-2', 'opacity-0');
+        toast.classList.add('translate-y-0', 'opacity-100');
+    });
+
+    setTimeout(() => {
+        toast.classList.remove('opacity-100');
+        toast.classList.add('opacity-0', '-translate-y-2');
+        setTimeout(() => toast.remove(), 350);
+    }, 3200);
+}
+
+function updateSimStatus(state, message) {
+    const badge = document.getElementById('simStatusBadge');
+    const dot = document.getElementById('simStatusDot');
+    const text = document.getElementById('simStatusText');
+    if (!badge || !dot || !text) return;
+
+    if (state === 'simulating') {
+        dot.className = 'w-2 h-2 rounded-full bg-cyan-400 animate-pulse';
+        badge.className = 'flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-mono bg-slate-900 border border-cyan-500/60 text-cyan-300 shadow-sm shadow-cyan-500/20';
+        text.innerText = message || '⚡ Solving...';
+    } else if (state === 'success') {
+        dot.className = 'w-2 h-2 rounded-full bg-emerald-400';
+        badge.className = 'flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-mono bg-slate-900 border border-emerald-500/60 text-emerald-300 shadow-sm shadow-emerald-500/20';
+        text.innerText = message || '✓ Solved';
+    } else if (state === 'warning') {
+        dot.className = 'w-2 h-2 rounded-full bg-amber-400 animate-pulse';
+        badge.className = 'flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-mono bg-slate-900 border border-amber-500/60 text-amber-300';
+        text.innerText = message || '⚠️ Warning';
+    } else if (state === 'error') {
+        dot.className = 'w-2 h-2 rounded-full bg-rose-500';
+        badge.className = 'flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-mono bg-slate-900 border border-rose-500/60 text-rose-300';
+        text.innerText = message || '✗ Error';
+    } else {
+        dot.className = 'w-2 h-2 rounded-full bg-slate-500';
+        badge.className = 'flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-mono bg-slate-900 border border-slate-700/80 text-slate-300';
+        text.innerText = message || 'Ready';
+    }
 }
 
 // -------------------------------------------------------------

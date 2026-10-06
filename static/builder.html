@@ -122,6 +122,18 @@
         #transientDurationBar:not(.hidden) {
             display: flex !important;
         }
+        @keyframes shake-btn {
+            0%, 100% { transform: translateX(0); }
+            20%, 60% { transform: translateX(-5px); }
+            40%, 80% { transform: translateX(5px); }
+        }
+        .shake-anim {
+            animation: shake-btn 0.4s ease-in-out;
+        }
+        .flash-amber {
+            box-shadow: 0 0 16px rgba(245, 158, 11, 0.85) !important;
+            border-color: #f59e0b !important;
+        }
     </style>
 </head>
 <body class="flex flex-col h-screen w-screen overflow-hidden">
@@ -175,6 +187,10 @@
             <button onclick="clearCircuit()" class="px-3 py-1.5 text-xs rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 flex items-center gap-1.5">
                 <i class="fa-solid fa-eraser"></i> Clear
             </button>
+            <div id="simStatusBadge" class="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-mono bg-slate-900 border border-slate-700/80 text-slate-300">
+                <span class="w-2 h-2 rounded-full bg-slate-500" id="simStatusDot"></span>
+                <span id="simStatusText">Ready</span>
+            </div>
             <button id="runBtn" onclick="runSimulation()" class="px-4 py-1.5 text-xs font-bold rounded bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-black flex items-center gap-2 shadow-lg shadow-cyan-500/20 transition-all cursor-pointer">
                 <i class="fa-solid fa-play"></i> Run Simulation
             </button>
