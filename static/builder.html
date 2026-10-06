@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PowerSim Pro - Interactive Power Electronics CAD & Simulator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --bg-main: #090d16;
+            --bg-panel: #111827;
+            --bg-card: #1f293d;
+            --border: #2e3a52;
+            --accent: #06b6d4;
+            --accent-glow: rgba(6, 182, 212, 0.4);
+        }
+        body {
+            background-color: var(--bg-main);
+            color: #e2e8f0;
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            overflow: hidden;
+            user-select: none;
+        }
+        .panel {
+            background-color: var(--bg-panel);
+            border: 1px solid var(--border);
+        }
+        .card {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border);
+        }
+        canvas {
+            background-color: #070a13;
+        }
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0f172a;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #475569;
+        }
+        .tool-btn {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 0.75rem;
+            border-radius: 0.375rem;
+            font-size: 0.8125rem;
+            font-weight: 500;
+            color: #94a3b8;
+            background: #1e293b;
+            border: 1px solid #334155;
+            transition: all 0.15s ease;
+            cursor: pointer;
+        }
+        .tool-btn:hover {
+            color: #f8fafc;
+            background: #334155;
+            border-color: #475569;
+        }
+        .tool-btn.active {
+            background: #0891b2;
+            color: #ffffff;
+            border-color: #22d3ee;
+            box-shadow: 0 0 10px rgba(6, 182, 212, 0.3);
+        }
+        .stat-badge {
+            background: #0f172a;
+            border: 1px solid #1e293b;
+            padding: 0.375rem 0.75rem;
+            border-radius: 0.375rem;
+        }
+        input[type="range"] {
+            accent-color: #06b6d4;
+        }
+        .glow-cyan {
+            box-shadow: 0 0 15px rgba(6, 182, 212, 0.35);
+        }
+    </style>
+</head>
+<body class="flex flex-col h-screen w-screen overflow-hidden">
+
+    <!-- Top Navigation Bar -->
+    <header class="h-14 panel border-b flex items-center justify-between px-4 z-20">
+        <div class="flex items-center gap-3">
+            <div class="w-8 h-8 rounded-lg bg-cyan-500/20 border border-cyan-500/50 flex items-center justify-center text-cyan-400">
+                <i class="fa-solid fa-bolt-lightning text-lg"></i>
+            </div>
+            <div>
+                <h1 class="text-base font-bold tracking-wide text-white flex items-center gap-2">
+                    PowerSim <span class="text-xs px-2 py-0.5 rounded bg-cyan-900/60 text-cyan-400 border border-cyan-700/50">PRO CAD</span>
+                </h1>
+                <p class="text-[10px] text-slate-400">Interactive Power Electronics Schematic CAD & MNA Solver</p>
+            </div>
+        </div>
+
+        <!-- Presets Menu -->
+        <div class="flex items-center gap-2">
+            <span class="text-xs text-slate-400 font-semibold uppercase tracking-wider mr-1"><i class="fa-solid fa-layer-group text-cyan-400 mr-1"></i> Presets:</span>
+            <button onclick="loadPreset('full_bridge_thyristor')" class="px-2.5 py-1 text-xs rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 hover:text-white transition flex items-center gap-1.5">
+                <i class="fa-solid fa-bridge text-cyan-400"></i> 1-Phase Full-Bridge (SCR)
+            </button>
+            <button onclick="loadPreset('mosfet_buck')" class="px-2.5 py-1 text-xs rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 hover:text-white transition flex items-center gap-1.5">
+                <i class="fa-solid fa-microchip text-emerald-400"></i> MOSFET Buck Chopper
+            </button>
+            <button onclick="loadPreset('half_wave')" class="px-2.5 py-1 text-xs rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 hover:text-white transition flex items-center gap-1.5">
+                <i class="fa-solid fa-wave-square text-amber-400"></i> Diode Rectifier
+            </button>
+            <button onclick="loadPreset('inverter_leg')" class="px-2.5 py-1 text-xs rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 hover:text-white transition flex items-center gap-1.5">
+                <i class="fa-solid fa-arrows-split-up-and-left text-purple-400"></i> MOSFET Half-Bridge Leg
+            </button>
+        </div>
+
+        <!-- Action Controls -->
+        <div class="flex items-center gap-2">
+            <button onclick="rotateSelected()" title="Rotate Selected Component (HotKey: R)" class="px-3 py-1.5 text-xs rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 flex items-center gap-1.5">
+                <i class="fa-solid fa-rotate-right"></i> Rotate (R)
+            </button>
+            <button onclick="deleteSelected()" title="Delete Selected (HotKey: Delete)" class="px-3 py-1.5 text-xs rounded bg-red-950/60 hover:bg-red-900/80 text-red-300 border border-red-800/60 flex items-center gap-1.5">
+                <i class="fa-solid fa-trash-can"></i> Delete
+            </button>
+            <button onclick="clearCircuit()" class="px-3 py-1.5 text-xs rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 flex items-center gap-1.5">
+                <i class="fa-solid fa-eraser"></i> Clear
+            </button>
+            <button id="runBtn" onclick="runSimulation()" class="px-4 py-1.5 text-xs font-bold rounded bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-black flex items-center gap-2 shadow-lg shadow-cyan-500/20 transition-all cursor-pointer">
+                <i class="fa-solid fa-play"></i> Run Simulation
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Workspace -->
+    <div class="flex flex-1 overflow-hidden relative">
+
+        <!-- Left Component Palette & Tools -->
+        <div class="w-56 panel border-r flex flex-col p-2.5 gap-3 overflow-y-auto z-10 shrink-0">
+            <!-- Mode / Select Tools -->
+            <div>
+                <div class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 px-1 flex items-center justify-between">
+                    <span>Interaction Tools</span>
+                    <i class="fa-solid fa-wrench text-slate-500 text-xs"></i>
+                </div>
+                <div class="flex flex-col gap-1">
+                    <button class="tool-btn active" onclick="selectTool('select')" id="tool-select">
+                        <i class="fa-solid fa-arrow-pointer text-cyan-400 w-4"></i>
+                        <span>Select & Move</span>
+                    </button>
+                    <button class="tool-btn" onclick="selectTool('probe_v')" id="tool-probe_v">
+                        <i class="fa-solid fa-crosshairs text-amber-400 w-4"></i>
+                        <span>Voltage Probe (V)</span>
+                    </button>
+                    <button class="tool-btn" onclick="selectTool('Wire')" id="tool-Wire">
+                        <i class="fa-solid fa-draw-polygon text-emerald-400 w-4"></i>
+                        <span>Wire Connector</span>
+                    </button>
+                    <button class="tool-btn" onclick="selectTool('Ground')" id="tool-Ground">
+                        <i class="fa-solid fa-earth-americas text-green-400 w-4"></i>
+                        <span>Ground (0V Ref)</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Circuit Components -->
+            <div>
+                <div class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 px-1 flex items-center justify-between">
+                    <span>Power Devices</span>
+                    <i class="fa-solid fa-microchip text-slate-500 text-xs"></i>
+                </div>
+                <div class="flex flex-col gap-1">
+                    <button class="tool-btn" onclick="selectTool('MOSFET')" id="tool-MOSFET">
+                        <i class="fa-solid fa-microchip text-cyan-400 w-4"></i>
+                        <span>MOSFET (Ideal)</span>
+                    </button>
+                    <button class="tool-btn" onclick="selectTool('Thyristor')" id="tool-Thyristor">
+                        <i class="fa-solid fa-code-fork text-blue-400 w-4"></i>
+                        <span>Thyristor (SCR)</span>
+                    </button>
+                    <button class="tool-btn" onclick="selectTool('Diode')" id="tool-Diode">
+                        <i class="fa-solid fa-play text-purple-400 w-4"></i>
+                        <span>Diode (Ideal)</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Passives & Sources -->
+            <div>
+                <div class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 px-1 flex items-center justify-between">
+                    <span>Passives & Sources</span>
+                    <i class="fa-solid fa-car-battery text-slate-500 text-xs"></i>
+                </div>
+                <div class="flex flex-col gap-1">
+                    <button class="tool-btn" onclick="selectTool('Resistor')" id="tool-Resistor">
+                        <i class="fa-solid fa-barcode text-amber-400 w-4"></i>
+                        <span>Resistor (R)</span>
+                    </button>
+                    <button class="tool-btn" onclick="selectTool('Inductor')" id="tool-Inductor">
+                        <i class="fa-solid fa-bezier-curve text-orange-400 w-4"></i>
+                        <span>Inductor (L)</span>
+                    </button>
+                    <button class="tool-btn" onclick="selectTool('Capacitor')" id="tool-Capacitor">
+                        <i class="fa-solid fa-grip-lines-vertical text-sky-400 w-4"></i>
+                        <span>Capacitor (C)</span>
+                    </button>
+                    <button class="tool-btn" onclick="selectTool('V_AC')" id="tool-V_AC">
+                        <i class="fa-solid fa-wave-square text-rose-400 w-4"></i>
+                        <span>AC Voltage Source</span>
+                    </button>
+                    <button class="tool-btn" onclick="selectTool('V_DC')" id="tool-V_DC">
+                        <i class="fa-solid fa-battery-full text-emerald-400 w-4"></i>
+                        <span>DC Voltage Source</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Hotkeys Help -->
+            <div class="mt-auto p-2 bg-slate-900/80 rounded border border-slate-800 text-[11px] text-slate-400 flex flex-col gap-1">
+                <div class="font-semibold text-slate-300 text-[11px] mb-0.5"><i class="fa-regular fa-keyboard mr-1"></i> Shortcuts:</div>
+                <div><kbd class="px-1 py-0.5 bg-slate-800 rounded border border-slate-700 text-slate-300">R</kbd> Rotate component</div>
+                <div><kbd class="px-1 py-0.5 bg-slate-800 rounded border border-slate-700 text-slate-300">Del</kbd> Delete component</div>
+                <div><kbd class="px-1 py-0.5 bg-slate-800 rounded border border-slate-700 text-slate-300">Space</kbd> + Drag to Pan</div>
+                <div><kbd class="px-1 py-0.5 bg-slate-800 rounded border border-slate-700 text-slate-300">Scroll</kbd> Zoom Canvas</div>
+            </div>
+        </div>
+
+        <!-- Center Canvas Area -->
+        <div class="flex-1 flex flex-col relative overflow-hidden">
+            <!-- Canvas Toolbar HUD -->
+            <div class="absolute top-3 left-4 z-10 flex items-center gap-2 pointer-events-auto">
+                <div class="card px-3 py-1.5 rounded-lg shadow-lg flex items-center gap-3 text-xs text-slate-300 border border-slate-700/80 backdrop-blur-md bg-slate-900/90">
+                    <span id="canvasModeLabel" class="font-semibold text-cyan-400 flex items-center gap-1.5">
+                        <i class="fa-solid fa-arrow-pointer"></i> Select & Move Mode
+                    </span>
+                    <span class="text-slate-600">|</span>
+                    <span id="connectionStatus" class="text-emerald-400 flex items-center gap-1">
+                        <span class="w-2 h-2 rounded-full bg-emerald-400 inline-block animate-pulse"></span> Circuit Ready
+                    </span>
+                    <span class="text-slate-600">|</span>
+                    <button onclick="resetZoom()" class="hover:text-cyan-400 transition" title="Reset View">
+                        <i class="fa-solid fa-arrows-to-dot"></i> Center View
+                    </button>
+                    <label class="flex items-center gap-1 cursor-pointer">
+                        <input type="checkbox" id="showNetsToggle" onchange="toggleNetLabels()" checked class="rounded accent-cyan-500">
+                        <span>Show Node Tags</span>
+                    </label>
+                    <label class="flex items-center gap-1 cursor-pointer">
+                        <input type="checkbox" id="showCurrentFlowToggle" checked class="rounded accent-cyan-500">
+                        <span class="text-cyan-300 font-semibold"><i class="fa-solid fa-bolt mr-1"></i>Current Flow</span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- Real-Time Playback HUD Bar (Top Center/Right) -->
+            <div class="absolute bottom-20 left-4 right-4 z-10 flex items-center justify-between pointer-events-none">
+                <div class="card px-3 py-2 rounded-xl shadow-2xl flex items-center gap-4 text-xs text-slate-300 border border-slate-700/80 backdrop-blur-md bg-slate-900/95 pointer-events-auto">
+                    <!-- Play/Pause Button -->
+                    <button id="playPauseBtn" onclick="togglePlayPause()" class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold flex items-center gap-1.5 shadow-md shadow-emerald-600/30 transition">
+                        <i class="fa-solid fa-play" id="playIcon"></i> <span id="playLabel">Run Real-Time</span>
+                    </button>
+                    
+                    <!-- Rewind / Step -->
+                    <div class="flex items-center gap-1">
+                        <button onclick="stepAnimation(-1)" title="Step Backward" class="w-7 h-7 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center">
+                            <i class="fa-solid fa-backward-step"></i>
+                        </button>
+                        <button onclick="stepAnimation(1)" title="Step Forward" class="w-7 h-7 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center">
+                            <i class="fa-solid fa-forward-step"></i>
+                        </button>
+                        <button onclick="resetAnimation()" title="Reset Time" class="w-7 h-7 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center">
+                            <i class="fa-solid fa-rotate-left"></i>
+                        </button>
+                    </div>
+
+                    <span class="text-slate-600">|</span>
+
+                    <!-- Speed Selector -->
+                    <div class="flex items-center gap-1 text-[11px]">
+                        <span class="text-slate-400 mr-1"><i class="fa-solid fa-gauge text-cyan-400"></i> Speed:</span>
+                        <button onclick="setSimSpeed(0.1)" class="speed-btn px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300" id="speed-0.1">0.1x</button>
+                        <button onclick="setSimSpeed(0.25)" class="speed-btn px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300" id="speed-0.25">0.25x</button>
+                        <button onclick="setSimSpeed(0.5)" class="speed-btn px-2 py-0.5 rounded bg-cyan-900 border border-cyan-500 text-white font-bold" id="speed-0.5">0.5x</button>
+                        <button onclick="setSimSpeed(1.0)" class="speed-btn px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300" id="speed-1.0">1x</button>
+                    </div>
+
+                    <span class="text-slate-600">|</span>
+
+                    <!-- Angle Slider & Readout -->
+                    <div class="flex items-center gap-2 min-w-[200px]">
+                        <span class="text-slate-400 text-[11px] font-semibold whitespace-nowrap"><i class="fa-regular fa-clock text-amber-400"></i> Angle &omega;t:</span>
+                        <input type="range" id="angleSlider" min="0" max="360" step="1" value="0" oninput="onAngleSliderInput(parseFloat(this.value))" class="flex-1 h-1 bg-slate-700 rounded-lg cursor-pointer">
+                        <span id="angleValueDisplay" class="font-mono text-cyan-400 font-bold text-xs min-w-[42px] text-right">0.0&deg;</span>
+                    </div>
+
+                    <span class="text-slate-600">|</span>
+
+                    <!-- Active Conduction Loop Status -->
+                    <div id="conductionStatusBadge" class="px-2.5 py-1 rounded bg-slate-800/80 border border-slate-700 text-[11px] font-mono text-cyan-300 flex items-center gap-1.5">
+                        <span class="w-2 h-2 rounded-full bg-cyan-400 inline-block"></span>
+                        <span id="conductionStatusText">Inactive</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Probing Instructions Banner (hidden by default) -->
+            <div id="probeBanner" class="hidden absolute top-3 right-4 z-10 card px-3 py-1.5 rounded-lg border-amber-500/50 bg-amber-950/80 text-amber-300 text-xs shadow-lg flex items-center gap-2">
+                <i class="fa-solid fa-crosshairs animate-spin text-amber-400"></i>
+                <span>Click any node/junction on the schematic to probe its voltage waveform!</span>
+            </div>
+
+            <!-- The Interactive Drawing Canvas -->
+            <div class="flex-1 relative w-full h-full" id="canvas-container">
+                <canvas id="circuitCanvas" class="w-full h-full"></canvas>
+            </div>
+
+            <!-- Bottom Live Stats Ribbon -->
+            <div class="h-16 panel border-t flex items-center px-4 gap-4 overflow-x-auto z-10 shrink-0 bg-slate-900/95">
+                <div class="stat-badge flex flex-col justify-center min-w-[120px]">
+                    <span class="text-[10px] uppercase tracking-wider text-slate-400">Avg DC Voltage</span>
+                    <span id="statAvgV" class="text-sm font-bold text-cyan-400 font-mono">-- V</span>
+                </div>
+                <div class="stat-badge flex flex-col justify-center min-w-[120px]">
+                    <span class="text-[10px] uppercase tracking-wider text-slate-400">RMS Voltage</span>
+                    <span id="statRmsV" class="text-sm font-bold text-cyan-400 font-mono">-- V</span>
+                </div>
+                <div class="stat-badge flex flex-col justify-center min-w-[120px]">
+                    <span class="text-[10px] uppercase tracking-wider text-slate-400">Avg DC Current</span>
+                    <span id="statAvgI" class="text-sm font-bold text-emerald-400 font-mono">-- A</span>
+                </div>
+                <div class="stat-badge flex flex-col justify-center min-w-[120px]">
+                    <span class="text-[10px] uppercase tracking-wider text-slate-400">RMS Current</span>
+                    <span id="statRmsI" class="text-sm font-bold text-emerald-400 font-mono">-- A</span>
+                </div>
+                <div class="stat-badge flex flex-col justify-center min-w-[120px]">
+                    <span class="text-[10px] uppercase tracking-wider text-slate-400">Active Power</span>
+                    <span id="statPower" class="text-sm font-bold text-amber-400 font-mono">-- W</span>
+                </div>
+                <div class="stat-badge flex flex-col justify-center min-w-[120px]">
+                    <span class="text-[10px] uppercase tracking-wider text-slate-400">Ripple Factor (RF)</span>
+                    <span id="statRF" class="text-sm font-bold text-purple-400 font-mono">--</span>
+                </div>
+                <div class="ml-auto text-xs text-slate-400 flex items-center gap-2">
+                    <span id="simTimeLabel">Simulation Time: 40 ms</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Panel: Properties Inspector & Oscilloscope -->
+        <div class="w-96 panel border-l flex flex-col overflow-hidden z-10 shrink-0">
+            <!-- Properties Inspector (Top half) -->
+            <div class="h-64 border-b border-slate-700/80 flex flex-col overflow-hidden">
+                <div class="px-3 py-2 bg-slate-900 border-b border-slate-800 flex items-center justify-between">
+                    <span class="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                        <i class="fa-solid fa-sliders text-cyan-400"></i> Component Parameters
+                    </span>
+                    <span id="selectedCompBadge" class="text-[11px] px-2 py-0.5 rounded bg-slate-800 text-slate-400 font-mono">None Selected</span>
+                </div>
+                <div id="propsContainer" class="flex-1 p-3 overflow-y-auto text-xs flex flex-col gap-3">
+                    <div class="text-slate-500 italic text-center py-6 flex flex-col items-center gap-2">
+                        <i class="fa-solid fa-hand-pointer text-2xl text-slate-600"></i>
+                        <span>Click any component in the schematic to inspect and change its electrical parameters live.</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Waveform & Channel Selector (Bottom half) -->
+            <div class="flex-1 flex flex-col overflow-hidden">
+                <div class="px-3 py-2 bg-slate-900 border-b border-slate-800 flex items-center justify-between">
+                    <span class="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                        <i class="fa-solid fa-chart-line text-emerald-400"></i> Oscilloscope Waveforms
+                    </span>
+                    <button onclick="toggleAllWaveforms(true)" class="text-[11px] text-cyan-400 hover:underline">Select All</button>
+                </div>
+
+                <!-- Channel Toggles Carousel/List -->
+                <div class="px-3 py-2 bg-slate-950/70 border-b border-slate-800/80 max-h-28 overflow-y-auto">
+                    <div id="channelCheckboxes" class="flex flex-wrap gap-1.5 text-[11px]">
+                        <span class="text-slate-500 italic">Run simulation to view channels...</span>
+                    </div>
+                </div>
+
+                <!-- Plot Container -->
+                <div class="flex-1 relative p-1 bg-slate-950 flex flex-col">
+                    <div id="plot" class="w-full h-full"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Script imports -->
+    <script src="builder.js"></script>
+</body>
+</html>

@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Power Electronics Simulator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <style>
+        body {
+            background-color: #0f172a;
+            color: #cbd5e1;
+        }
+        .panel {
+            background-color: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 0.5rem;
+            padding: 1rem;
+        }
+        .value-box {
+            background-color: #0f172a;
+            border: 1px solid #334155;
+            padding: 0.5rem;
+            border-radius: 0.25rem;
+            text-align: center;
+        }
+        .value-box span {
+            display: block;
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #38bdf8;
+        }
+        input[type=range] {
+            accent-color: #38bdf8;
+        }
+        /* Schematic CSS representation */
+        .schematic {
+            position: relative;
+            width: 100%;
+            height: 300px;
+            background: #020617;
+            border-radius: 0.5rem;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .wire {
+            position: absolute;
+            background: #38bdf8;
+        }
+        .node {
+            position: absolute;
+            width: 8px;
+            height: 8px;
+            background: #38bdf8;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+        }
+        .component {
+            position: absolute;
+            color: #cbd5e1;
+            font-size: 0.75rem;
+            text-align: center;
+            transform: translate(-50%, -50%);
+        }
+        .switch {
+            width: 40px;
+            height: 20px;
+            border: 2px solid #38bdf8;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #1e293b;
+            font-weight: bold;
+        }
+        .load {
+            width: 40px;
+            height: 60px;
+            border: 2px solid #f43f5e;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #1e293b;
+            color: #f43f5e;
+            font-weight: bold;
+        }
+        .source {
+            width: 40px;
+            height: 40px;
+            border: 2px solid #22c55e;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #1e293b;
+            color: #22c55e;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body class="p-4 flex flex-col gap-4">
+
+    <!-- Top Row -->
+    <div class="flex gap-4 h-[400px]">
+        <!-- Schematic Diagram -->
+        <div class="panel w-1/3 flex flex-col">
+            <h2 class="text-sm font-bold text-slate-400 mb-2 uppercase tracking-wider">Circuit Schematic: Full-Bridge</h2>
+            <div class="schematic flex-1">
+                <!-- Wires -->
+                <div class="wire" style="top: 20%; left: 10%; width: 30%; height: 2px;"></div> <!-- Source to top leg -->
+                <div class="wire" style="bottom: 20%; left: 10%; width: 30%; height: 2px;"></div> <!-- Source to bot leg -->
+                <div class="wire" style="top: 20%; left: 40%; width: 2px; height: 60%;"></div> <!-- Left Leg -->
+                <div class="wire" style="top: 20%; left: 60%; width: 2px; height: 60%;"></div> <!-- Right Leg -->
+                <div class="wire" style="top: 20%; left: 40%; width: 20%; height: 2px;"></div> <!-- Top connect -->
+                <div class="wire" style="bottom: 20%; left: 40%; width: 20%; height: 2px;"></div> <!-- Bot connect -->
+                <div class="wire" style="top: 20%; left: 60%; width: 20%; height: 2px;"></div> <!-- To Load Top -->
+                <div class="wire" style="bottom: 20%; left: 60%; width: 20%; height: 2px;"></div> <!-- To Load Bot -->
+                <div class="wire" style="top: 20%; left: 80%; width: 2px; height: 60%;"></div> <!-- Load Branch -->
+
+                <!-- Components -->
+                <div class="component source" style="left: 10%; top: 50%;">AC</div>
+                <div class="component switch" style="left: 40%; top: 35%;">T1</div>
+                <div class="component switch" style="left: 40%; top: 65%;">T4</div>
+                <div class="component switch" style="left: 60%; top: 35%;">T3</div>
+                <div class="component switch" style="left: 60%; top: 65%;">T2</div>
+                <div class="component load" style="left: 80%; top: 50%;">RL</div>
+                
+                <div class="node" style="left: 40%; top: 50%;"></div>
+                <div class="node" style="left: 60%; top: 50%;"></div>
+            </div>
+        </div>
+
+        <!-- Waveforms -->
+        <div class="panel w-2/3 flex flex-col">
+            <h2 class="text-sm font-bold text-slate-400 mb-2 uppercase tracking-wider">Waveforms</h2>
+            <div id="plot" class="flex-1 w-full bg-slate-900 rounded"></div>
+        </div>
+    </div>
+
+    <!-- Controls Row -->
+    <div class="flex gap-4">
+        <!-- Firing Angle -->
+        <div class="panel w-1/3">
+            <h2 class="text-sm font-bold text-slate-400 mb-4 uppercase tracking-wider">Firing Angle (&alpha;)</h2>
+            <div class="flex items-center gap-4">
+                <input type="range" id="alphaSlider" min="0" max="180" value="45" class="w-full">
+                <span id="alphaValue" class="text-xl font-bold text-white w-12 text-right">45&deg;</span>
+            </div>
+        </div>
+
+        <!-- Parameters -->
+        <div class="panel w-1/3">
+            <h2 class="text-sm font-bold text-slate-400 mb-4 uppercase tracking-wider">Load Parameters</h2>
+            <div class="flex flex-col gap-2">
+                <div class="flex items-center justify-between">
+                    <label class="text-sm">R (Resistance) &Omega;</label>
+                    <input type="number" id="rInput" value="10" class="bg-slate-700 text-white p-1 rounded w-20 text-right">
+                </div>
+                <div class="flex items-center justify-between">
+                    <label class="text-sm">L (Inductance) mH</label>
+                    <input type="number" id="lInput" value="10" class="bg-slate-700 text-white p-1 rounded w-20 text-right">
+                </div>
+                <div class="flex items-center justify-between">
+                    <label class="text-sm">Source RMS Voltage</label>
+                    <input type="number" id="vInput" value="230" class="bg-slate-700 text-white p-1 rounded w-20 text-right">
+                </div>
+            </div>
+        </div>
+
+        <!-- Metrics -->
+        <div class="panel w-1/3 flex gap-2">
+            <div class="value-box flex-1 flex flex-col justify-center">
+                <div class="text-xs text-slate-400 uppercase">Avg DC Voltage</div>
+                <span id="avgV">0.0 V</span>
+            </div>
+            <div class="value-box flex-1 flex flex-col justify-center">
+                <div class="text-xs text-slate-400 uppercase">Avg DC Current</div>
+                <span id="avgI">0.0 A</span>
+            </div>
+            <div class="value-box flex-1 flex flex-col justify-center">
+                <div class="text-xs text-slate-400 uppercase">Avg Power</div>
+                <span id="avgP">0.0 W</span>
+            </div>
+        </div>
+    </div>
+    
+    <script src="script.js"></script>
+</body>
+</html>
