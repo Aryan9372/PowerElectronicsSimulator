@@ -58,14 +58,15 @@ let isSimulating = false;
 // Initialize Canvas Sizing
 function resizeCanvas() {
     if (!container) return;
-    width = container.clientWidth;
-    height = container.clientHeight;
-    canvas.width = width * window.devicePixelRatio;
-    canvas.height = height * window.devicePixelRatio;
-    canvas.style.width = width + 'px';
-    canvas.style.height = height + 'px';
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+    const cw = container.clientWidth;
+    const ch = container.clientHeight;
+    if (cw <= 0 || ch <= 0) return;
+    if (cw === width && ch === height) return; // Prevent unnecessary buffer re-allocation and flicker
+    width = cw;
+    height = ch;
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.round(width * dpr);
+    canvas.height = Math.round(height * dpr);
 }
 window.addEventListener('resize', resizeCanvas);
 setTimeout(resizeCanvas, 50);
@@ -95,207 +96,74 @@ function invalidateNets() {
     cachedNetData = null;
 }
 
-// -------------------------------------------------------------
-// Component Data Structures
-// -------------------------------------------------------------
-function createComponent(type, p1, p2) {
-    const id = getNextId(type);
-    const comp = {
-        id: id,
-        type: type,
-        p1: { x: p1.x, y: p1.y },
-        p2: { x: p2.x, y: p2.y },
-        rotation: 0,
-        props: getDefaultProps(type)
-    };
-    invalidateNets();
-    return comp;
-}
+// Real-Time Playback & Animation State
+let isPlaying = true;
+let currentCycleAngleDeg = 0.0; // 0.0 to 360.0 degrees
+let simSpeed = 0.5; // Playback speed (0.1x to 2x)
+let lastFrameTime = performance.now();
+let lastDomUpdateTime = 0;
+let particlePhase = 0;
+let lastActiveConductorsStr = '';
 
-function getNextId(type) {
-    const prefixMap = {
-        'Resistor': 'R',
-        'Inductor': 'L',
-        'Capacitor': 'C',
-        'V_AC': 'V_ac',
-        'V_DC': 'V_dc',
-        'Diode': 'D',
-        'Thyristor': 'T',
-        'MOSFET': 'M',
-        'Wire': 'W'
-    };
-    const prefix = prefixMap[type] || 'U';
-    return `${prefix}${compIdCounter++}`;
-}
-
-function getDefaultProps(type) {
-    switch (type) {
-        case 'Resistor':
-            return { value: 20 }; // Ohms
-        case 'Inductor':
-            return { value: 45 }; // mH
-        case 'Capacitor':
-            return { value: 220, v0: 0 }; // uF
-        case 'V_AC':
-            return { amplitude: 325, freq: 50, phase: 0 }; // ~230V RMS
-        case 'V_DC':
-            return { value: 100 }; // Volts
-        case 'Diode':
-            return { ron: 0.001, roff: 1e6 };
-        case 'Thyristor':
-            return { delay_angle: 45, width: 20, freq: 50, ron: 0.001, roff: 1e6 };
-        case 'MOSFET':
-            return { ctrl_type: 'pwm', freq: 5000, duty: 50, phase: 0, ron: 0.005, roff: 1e6, body_diode: true };
-        default:
-            return {};
-    }
-}
-
-// -------------------------------------------------------------
-// Netlist & Connectivity Analysis
-// -------------------------------------------------------------
-function computeElectricalNets() {
-    if (cachedNetData) return cachedNetData;
-
-    const parent = {};
-    function find(i) {
-        if (!parent[i]) parent[i] = i;
-        if (parent[i] === i) return i;
-        parent[i] = find(parent[i]);
-        return parent[i];
-    }
-    function union(i, j) {
-        const rootI = find(i);
-        const rootJ = find(j);
-        if (rootI !== rootJ) parent[rootI] = rootJ;
-    }
-
-    // Connect wires directly
-    components.forEach(c => {
-        const n1 = `N_${Math.round(c.p1.x/gridSize)}_${Math.round(c.p1.y/gridSize)}`;
-        const n2 = `N_${Math.round(c.p2.x/gridSize)}_${Math.round(c.p2.y/gridSize)}`;
-        find(n1); find(n2);
-        if (c.type === 'Wire') {
-            union(n1, n2);
-        }
-    });
-
-    // Merge all ground nodes into 'GND'
-    groundNodes.forEach(gId => {
-        union(gId, 'GND');
-    });
-
-    const netMap = {};
-    let netCounter = 1;
-    const netRoots = {};
-
-    const gndRoot = find('GND');
-    netRoots[gndRoot] = 'GND';
-
-    components.forEach(c => {
-        [c.p1, c.p2].forEach(p => {
-            const nodeId = `N_${Math.round(p.x/gridSize)}_${Math.round(p.y/gridSize)}`;
-            const root = find(nodeId);
-            if (!netRoots[root]) {
-                netRoots[root] = `N${netCounter++}`;
-            }
-            netMap[nodeId] = netRoots[root];
-        });
-    });
-
-    const pinCounts = {};
-    components.forEach(c => {
-        const k1 = `${c.p1.x},${c.p1.y}`;
-        const k2 = `${c.p2.x},${c.p2.y}`;
-        pinCounts[k1] = (pinCounts[k1] || 0) + 1;
-        pinCounts[k2] = (pinCounts[k2] || 0) + 1;
-    });
-
-    cachedNetData = { netMap, pinCounts };
-    return cachedNetData;
-}
-
-// -------------------------------------------------------------
-// Real-Time Playback Controls & Frame Loop (60 FPS)
-// -------------------------------------------------------------
-function togglePlayPause() {
-    isPlaying = !isPlaying;
-    const btn = document.getElementById('playPauseBtn');
-    const icon = document.getElementById('playIcon');
-    const label = document.getElementById('playLabel');
+// Main Animation Loop
+function animateLoop(timestamp) {
+    const dt = Math.min((timestamp - lastFrameTime) / 1000.0, 0.1); // clamp dt to avoid huge jumps
+    lastFrameTime = timestamp;
 
     if (isPlaying) {
-        btn.className = "px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold flex items-center gap-1.5 shadow-md shadow-emerald-600/30 transition";
-        icon.className = "fa-solid fa-pause";
-        label.innerText = "Pause";
-    } else {
-        btn.className = "px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold flex items-center gap-1.5 border border-slate-700 transition";
-        icon.className = "fa-solid fa-play";
-        label.innerText = "Run Real-Time";
+        // Human-visible AC cycle: 1 full 360° cycle takes 4 seconds at 1x speed (90°/sec)
+        const angleSpeedDegPerSec = 90.0 * simSpeed;
+        currentCycleAngleDeg = (currentCycleAngleDeg + angleSpeedDegPerSec * dt) % 360.0;
     }
-}
 
-function setSimSpeed(speed) {
-    simSpeed = speed;
-    document.querySelectorAll('.speed-btn').forEach(btn => {
-        btn.className = "speed-btn px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300";
-    });
-    const active = document.getElementById(`speed-${speed}`);
-    if (active) {
-        active.className = "speed-btn px-2 py-0.5 rounded bg-cyan-900 border border-cyan-500 text-white font-bold";
+    particlePhase += dt * 35.0 * simSpeed;
+
+    // Render Canvas at 60 FPS
+    renderCanvas();
+
+    // Throttle DOM text updates to 10 FPS to eliminate layout thrashing
+    if (timestamp - lastDomUpdateTime > 100) {
+        lastDomUpdateTime = timestamp;
+        updateAngleDisplay(currentCycleAngleDeg);
     }
+
+    requestAnimationFrame(animateLoop);
 }
+requestAnimationFrame(animateLoop);
 
 function onAngleSliderInput(angleDeg) {
-    simPlaybackTime = (angleDeg / 360.0) * simCyclePeriod;
-    updateAngleDisplay(angleDeg);
+    currentCycleAngleDeg = Math.max(0, Math.min(360, angleDeg));
+    updateAngleDisplay(currentCycleAngleDeg);
 }
 
 function stepAnimation(direction) {
-    const stepSec = 0.0005; // 0.5 ms
-    simPlaybackTime = (simPlaybackTime + direction * stepSec + simCyclePeriod) % simCyclePeriod;
-    const deg = (simPlaybackTime / simCyclePeriod) * 360.0;
-    updateAngleDisplay(deg);
+    currentCycleAngleDeg = (currentCycleAngleDeg + direction * 5.0 + 360.0) % 360.0;
+    updateAngleDisplay(currentCycleAngleDeg);
 }
 
 function resetAnimation() {
-    simPlaybackTime = 0.0;
+    currentCycleAngleDeg = 0.0;
     updateAngleDisplay(0.0);
 }
 
 function updateAngleDisplay(deg) {
     const slider = document.getElementById('angleSlider');
     const disp = document.getElementById('angleValueDisplay');
-    if (slider && document.activeElement !== slider) slider.value = deg;
+    if (slider && document.activeElement !== slider) slider.value = Math.round(deg);
     if (disp) disp.innerText = `${deg.toFixed(1)}°`;
 }
 
-// Main 60 FPS Animation Loop
-function animateLoop(timestamp) {
-    const dt = (timestamp - lastFrameTime) / 1000.0;
-    lastFrameTime = timestamp;
-
-    if (isPlaying && simCyclePeriod > 0) {
-        simPlaybackTime = (simPlaybackTime + dt * simSpeed) % simCyclePeriod;
-        const currentAngleDeg = (simPlaybackTime / simCyclePeriod) * 360.0;
-        updateAngleDisplay(currentAngleDeg);
-    }
-
-    particlePhase += dt * 80.0 * simSpeed;
-
-    renderCanvas();
-    requestAnimationFrame(animateLoop);
-}
-requestAnimationFrame(animateLoop);
-
-// -------------------------------------------------------------
 // Canvas Rendering Logic
-// -------------------------------------------------------------
 function renderCanvas() {
-    if (!ctx) return;
-    ctx.save();
-    ctx.clearRect(0, 0, width, height);
+    if (!ctx || width <= 0 || height <= 0) return;
 
+    const dpr = window.devicePixelRatio || 1;
+    // Perfect clean redraw with no ghosting or flicker
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    ctx.save();
+    ctx.scale(dpr, dpr);
     ctx.translate(panX, panY);
     ctx.scale(zoom, zoom);
 
@@ -335,17 +203,14 @@ function renderCanvas() {
         drawCurrentFlowParticles(stepIdx);
     }
 
-    // 5. Junction Dots (diameter 8px)
+    // 5. Junction Dots
     for (const [key, count] of Object.entries(pinCounts)) {
         if (count >= 3) {
             const [x, y] = key.split(',').map(Number);
             ctx.fillStyle = '#06b6d4';
-            ctx.shadowColor = '#06b6d4';
-            ctx.shadowBlur = 6;
             ctx.beginPath();
             ctx.arc(x, y, 4, 0, Math.PI * 2);
             ctx.fill();
-            ctx.shadowBlur = 0;
         }
     }
 
@@ -386,6 +251,44 @@ function renderCanvas() {
         drawSnapHalo(hoveredNode.x, hoveredNode.y);
     }
 
+    // Update Conduction Badge Status in HUD only when changed
+    const conductorsStr = activeConductors.sort().join(' + ');
+    if (conductorsStr !== lastActiveConductorsStr) {
+        lastActiveConductorsStr = conductorsStr;
+        updateConductionStatusText(activeConductors);
+    }
+
+    ctx.restore();
+}
+
+    // 8. Active Interaction Previews
+    if (currentTool === 'Wire' && isMouseDown && wireStartNode) {
+        const p1 = wireStartNode;
+        const p2 = snapToGrid(currentMousePos.x, currentMousePos.y);
+        ctx.strokeStyle = '#22d3ee';
+        ctx.lineWidth = 2.5;
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        drawSnapHalo(p2.x, p2.y);
+    } else if (currentTool !== 'select' && currentTool !== 'probe_v' && currentTool !== 'Ground' && isMouseDown && wireStartNode) {
+        const p1 = wireStartNode;
+        const p2 = snapToGrid(currentMousePos.x, currentMousePos.y);
+        ctx.strokeStyle = 'rgba(6, 182, 212, 0.7)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+        ctx.stroke();
+    }
+
+    if (hoveredNode) {
+        drawSnapHalo(hoveredNode.x, hoveredNode.y);
+    }
+
     // Update Conduction Badge Status in HUD
     updateConductionStatusText(activeConductors);
 
@@ -395,11 +298,14 @@ function renderCanvas() {
 function getSimulationStepIndex() {
     if (!lastSimResults || !lastSimResults.time || lastSimResults.time.length === 0) return 0;
     const times = lastSimResults.time;
-    const tMod = simPlaybackTime % times[times.length - 1];
+    const totalSimTime = times[times.length - 1];
+    const cycleDuration = Math.min(0.02, totalSimTime);
+    const startCycleTime = Math.max(0, totalSimTime - cycleDuration);
+    const fraction = (currentCycleAngleDeg / 360.0);
+    const targetTime = startCycleTime + fraction * cycleDuration;
     
-    // Binary search or direct ratio
-    const ratio = tMod / times[times.length - 1];
-    const idx = Math.min(times.length - 1, Math.max(0, Math.floor(ratio * times.length)));
+    const ratio = Math.max(0, Math.min(1, targetTime / totalSimTime));
+    const idx = Math.min(times.length - 1, Math.max(0, Math.floor(ratio * (times.length - 1))));
     return idx;
 }
 
@@ -441,8 +347,6 @@ function updateConductionStatusText(activeConductors) {
 function drawCurrentFlowParticles(stepIdx) {
     ctx.save();
     ctx.fillStyle = '#38bdf8';
-    ctx.shadowColor = '#38bdf8';
-    ctx.shadowBlur = 6;
 
     components.forEach(c => {
         const iVal = getComponentCurrent(c, stepIdx);
@@ -598,16 +502,21 @@ function drawComponent(c, isSelected, isHovered, netMap, isSwitchActive, current
     const isSwitchType = (c.type === 'Thyristor' || c.type === 'Diode' || c.type === 'MOSFET');
     if (isSwitchType) {
         if (isSwitchActive) {
-            // Neon Green Glow Box around switch
+            // Neon Green Glow Box around switch (clean, flicker-free rendering)
             ctx.save();
-            ctx.shadowColor = '#10b981';
-            ctx.shadowBlur = 18;
+            ctx.fillStyle = 'rgba(34, 197, 94, 0.22)';
             ctx.strokeStyle = '#22c55e';
-            ctx.fillStyle = 'rgba(34, 197, 94, 0.2)';
-            ctx.lineWidth = 2;
+            ctx.lineWidth = 2.5;
             ctx.beginPath();
             ctx.roundRect(mx - 24, my - 24, 48, 48, 8);
             ctx.fill();
+            ctx.stroke();
+
+            // Soft outer halo border
+            ctx.strokeStyle = 'rgba(34, 197, 94, 0.35)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.roundRect(mx - 27, my - 27, 54, 54, 10);
             ctx.stroke();
             ctx.restore();
         } else {
