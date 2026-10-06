@@ -31,8 +31,12 @@
             background-color: var(--bg-card);
             border: 1px solid var(--border);
         }
-        canvas {
+        #circuitCanvas {
             background-color: #070a13;
+        }
+        #plotCursorCanvas {
+            background: transparent !important;
+            background-color: transparent !important;
         }
         /* Custom scrollbar */
         ::-webkit-scrollbar {
@@ -407,8 +411,8 @@
 
                 <!-- Plot Container with Sweep Cursor Overlay -->
                 <div id="plotWrapper" class="flex-1 relative p-1 bg-slate-950 flex flex-col min-h-0">
-                    <div id="plot" class="w-full h-full"></div>
-                    <canvas id="plotCursorCanvas" class="absolute inset-0 pointer-events-none z-20"></canvas>
+                    <div id="plot" class="w-full h-full flex-1" style="min-height: 200px;"></div>
+                    <canvas id="plotCursorCanvas" class="absolute inset-0 pointer-events-none z-20" style="background: transparent !important;"></canvas>
                 </div>
             </div>
         </div>

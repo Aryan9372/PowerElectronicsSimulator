@@ -1655,18 +1655,12 @@ function toggleAllWaveforms(enableAll) {
     updatePlot();
 }
 
-// Optimized Plotly update with downsampling for maximum smoothness
+// Plotly update displaying full backend solver resolution
 function updatePlot() {
     if (!lastSimResults) return;
     const { time, nodes, branch_i, switches } = lastSimResults;
 
-    // Downsample if more than 600 points to keep UI at 60 FPS
-    const step = Math.max(1, Math.floor(time.length / 600));
-    const downsampledTime = [];
-    for (let i = 0; i < time.length; i += step) {
-        downsampledTime.push(time[i] * 1000.0);
-    }
-
+    const fullTimeMs = time.map(t => t * 1000.0);
     const traces = [];
     const colorPalette = ['#06b6d4', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6', '#3b82f6', '#14b8a6', '#f97316'];
     let colorIdx = 0;
@@ -1678,11 +1672,9 @@ function updatePlot() {
         if (key.startsWith('V(')) {
             const node = key.slice(2, -1);
             if (nodes[node]) {
-                const yVals = [];
-                for (let i = 0; i < time.length; i += step) yVals.push(nodes[node][i]);
                 traces.push({
-                    x: downsampledTime,
-                    y: yVals,
+                    x: fullTimeMs,
+                    y: nodes[node],
                     mode: 'lines',
                     name: key,
                     line: { color: color, width: 2 }
@@ -1691,11 +1683,9 @@ function updatePlot() {
         } else if (key.startsWith('I(')) {
             const cid = key.slice(2, -1);
             if (branch_i[cid]) {
-                const yVals = [];
-                for (let i = 0; i < time.length; i += step) yVals.push(branch_i[cid][i]);
                 traces.push({
-                    x: downsampledTime,
-                    y: yVals,
+                    x: fullTimeMs,
+                    y: branch_i[cid],
                     mode: 'lines',
                     name: key,
                     yaxis: 'y2',
@@ -1705,11 +1695,9 @@ function updatePlot() {
         } else if (key.startsWith('State(')) {
             const cid = key.slice(6, -1);
             if (switches[cid]) {
-                const yVals = [];
-                for (let i = 0; i < time.length; i += step) yVals.push(switches[cid][i]);
                 traces.push({
-                    x: downsampledTime,
-                    y: yVals,
+                    x: fullTimeMs,
+                    y: switches[cid],
                     mode: 'lines',
                     name: key,
                     yaxis: 'y3',
@@ -1722,8 +1710,9 @@ function updatePlot() {
     const layout = {
         paper_bgcolor: 'rgba(0,0,0,0)',
         plot_bgcolor: '#070a13',
+        autosize: true,
         font: { color: '#94a3b8', size: 10 },
-        margin: { l: 45, r: 45, t: 15, b: 35 },
+        margin: { l: 45, r: 45, t: 20, b: 35 },
         hovermode: 'x unified',
         xaxis: {
             title: 'Time (ms)',
@@ -1741,6 +1730,14 @@ function updatePlot() {
             side: 'right',
             gridcolor: 'rgba(0,0,0,0)',
             zerolinecolor: '#334155'
+        },
+        yaxis3: {
+            title: 'State',
+            overlaying: 'y',
+            side: 'right',
+            showgrid: false,
+            range: [-0.1, 1.2],
+            showticklabels: false
         },
         legend: {
             orientation: 'h',
@@ -1774,10 +1771,7 @@ function updateStatsDashboard(data) {
         if (vStats) {
             avgV = vStats.avg;
             rmsV = vStats.rms;
-            if (avgV !== 0) {
-                const ff = rmsV / Math.abs(avgV);
-                rf = Math.sqrt(Math.max(0, ff**2 - 1));
-            }
+            rf = vStats.rf !== undefined ? vStats.rf : 0;
         }
     }
 
@@ -2170,20 +2164,21 @@ function loadPreset(name) {
         groundNodes.add(`N_${Math.round((ox + 300)/gridSize)}_${Math.round((oy + 240)/gridSize)}`);
 
     // ---------------------------------------------------------
+    // ---------------------------------------------------------
     // 11. 3-Phase 6-Diode Bridge Rectifier
     // ---------------------------------------------------------
     } else if (name === 'three_phase_bridge_diode') {
         const ox = 90, oy = 90;
 
-        const va = createComponent('V_AC', { x: ox, y: oy + 120 }, { x: ox + 90, y: oy + 60 });
+        const va = createComponent('V_AC', { x: ox + 90, y: oy + 60 }, { x: ox, y: oy + 120 });
         va.props = { amplitude: 325, freq: 50, phase: 0 };
         components.push(va);
 
-        const vb = createComponent('V_AC', { x: ox, y: oy + 120 }, { x: ox + 90, y: oy + 120 });
+        const vb = createComponent('V_AC', { x: ox + 90, y: oy + 120 }, { x: ox, y: oy + 120 });
         vb.props = { amplitude: 325, freq: 50, phase: -120 };
         components.push(vb);
 
-        const vc = createComponent('V_AC', { x: ox, y: oy + 120 }, { x: ox + 90, y: oy + 180 });
+        const vc = createComponent('V_AC', { x: ox + 90, y: oy + 180 }, { x: ox, y: oy + 120 });
         vc.props = { amplitude: 325, freq: 50, phase: 120 };
         components.push(vc);
 
@@ -2223,15 +2218,15 @@ function loadPreset(name) {
     } else if (name === 'three_phase_bridge_scr') {
         const ox = 90, oy = 90;
 
-        const va = createComponent('V_AC', { x: ox, y: oy + 120 }, { x: ox + 90, y: oy + 60 });
+        const va = createComponent('V_AC', { x: ox + 90, y: oy + 60 }, { x: ox, y: oy + 120 });
         va.props = { amplitude: 325, freq: 50, phase: 0 };
         components.push(va);
 
-        const vb = createComponent('V_AC', { x: ox, y: oy + 120 }, { x: ox + 90, y: oy + 120 });
+        const vb = createComponent('V_AC', { x: ox + 90, y: oy + 120 }, { x: ox, y: oy + 120 });
         vb.props = { amplitude: 325, freq: 50, phase: -120 };
         components.push(vb);
 
-        const vc = createComponent('V_AC', { x: ox, y: oy + 120 }, { x: ox + 90, y: oy + 180 });
+        const vc = createComponent('V_AC', { x: ox + 90, y: oy + 180 }, { x: ox, y: oy + 120 });
         vc.props = { amplitude: 325, freq: 50, phase: 120 };
         components.push(vc);
 
@@ -2240,27 +2235,27 @@ function loadPreset(name) {
         components.push(createComponent('Wire', { x: ox + 90, y: oy + 180 }, { x: ox + 300, y: oy + 180 }));
 
         const t1 = createComponent('Thyristor', { x: ox + 180, y: oy + 60 }, { x: ox + 180, y: oy });
-        t1.props = { delay_angle: 60, width: 30, freq: 50, ron: 0.001, roff: 1e6 };
+        t1.props = { delay_angle: 60, width: 60, freq: 50, ron: 0.001, roff: 1e6 };
         components.push(t1);
 
         const t3 = createComponent('Thyristor', { x: ox + 240, y: oy + 120 }, { x: ox + 240, y: oy });
-        t3.props = { delay_angle: 180, width: 30, freq: 50, ron: 0.001, roff: 1e6 };
+        t3.props = { delay_angle: 180, width: 60, freq: 50, ron: 0.001, roff: 1e6 };
         components.push(t3);
 
         const t5 = createComponent('Thyristor', { x: ox + 300, y: oy + 180 }, { x: ox + 300, y: oy });
-        t5.props = { delay_angle: 300, width: 30, freq: 50, ron: 0.001, roff: 1e6 };
+        t5.props = { delay_angle: 300, width: 60, freq: 50, ron: 0.001, roff: 1e6 };
         components.push(t5);
 
         const t4 = createComponent('Thyristor', { x: ox + 180, y: oy + 240 }, { x: ox + 180, y: oy + 60 });
-        t4.props = { delay_angle: 240, width: 30, freq: 50, ron: 0.001, roff: 1e6 };
+        t4.props = { delay_angle: 240, width: 60, freq: 50, ron: 0.001, roff: 1e6 };
         components.push(t4);
 
         const t6 = createComponent('Thyristor', { x: ox + 240, y: oy + 240 }, { x: ox + 240, y: oy + 120 });
-        t6.props = { delay_angle: 0, width: 30, freq: 50, ron: 0.001, roff: 1e6 };
+        t6.props = { delay_angle: 0, width: 60, freq: 50, ron: 0.001, roff: 1e6 };
         components.push(t6);
 
         const t2 = createComponent('Thyristor', { x: ox + 300, y: oy + 240 }, { x: ox + 300, y: oy + 180 });
-        t2.props = { delay_angle: 120, width: 30, freq: 50, ron: 0.001, roff: 1e6 };
+        t2.props = { delay_angle: 120, width: 60, freq: 50, ron: 0.001, roff: 1e6 };
         components.push(t2);
 
         components.push(createComponent('Wire', { x: ox + 180, y: oy }, { x: ox + 240, y: oy }));
@@ -2287,15 +2282,15 @@ function loadPreset(name) {
     } else if (name === 'three_phase_half_wave_diode') {
         const ox = 120, oy = 90;
 
-        const va = createComponent('V_AC', { x: ox, y: oy + 180 }, { x: ox + 90, y: oy });
+        const va = createComponent('V_AC', { x: ox + 90, y: oy }, { x: ox, y: oy + 180 });
         va.props = { amplitude: 325, freq: 50, phase: 0 };
         components.push(va);
 
-        const vb = createComponent('V_AC', { x: ox, y: oy + 180 }, { x: ox + 90, y: oy + 60 });
+        const vb = createComponent('V_AC', { x: ox + 90, y: oy + 60 }, { x: ox, y: oy + 180 });
         vb.props = { amplitude: 325, freq: 50, phase: -120 };
         components.push(vb);
 
-        const vc = createComponent('V_AC', { x: ox, y: oy + 180 }, { x: ox + 90, y: oy + 120 });
+        const vc = createComponent('V_AC', { x: ox + 90, y: oy + 120 }, { x: ox, y: oy + 180 });
         vc.props = { amplitude: 325, freq: 50, phase: 120 };
         components.push(vc);
 
@@ -2324,28 +2319,28 @@ function loadPreset(name) {
     } else if (name === 'three_phase_half_wave_scr') {
         const ox = 120, oy = 90;
 
-        const va = createComponent('V_AC', { x: ox, y: oy + 180 }, { x: ox + 90, y: oy });
+        const va = createComponent('V_AC', { x: ox + 90, y: oy }, { x: ox, y: oy + 180 });
         va.props = { amplitude: 325, freq: 50, phase: 0 };
         components.push(va);
 
-        const vb = createComponent('V_AC', { x: ox, y: oy + 180 }, { x: ox + 90, y: oy + 60 });
+        const vb = createComponent('V_AC', { x: ox + 90, y: oy + 60 }, { x: ox, y: oy + 180 });
         vb.props = { amplitude: 325, freq: 50, phase: -120 };
         components.push(vb);
 
-        const vc = createComponent('V_AC', { x: ox, y: oy + 180 }, { x: ox + 90, y: oy + 120 });
+        const vc = createComponent('V_AC', { x: ox + 90, y: oy + 120 }, { x: ox, y: oy + 180 });
         vc.props = { amplitude: 325, freq: 50, phase: 120 };
         components.push(vc);
 
         const t1 = createComponent('Thyristor', { x: ox + 90, y: oy }, { x: ox + 180, y: oy });
-        t1.props = { delay_angle: 60, width: 30, freq: 50, ron: 0.001, roff: 1e6 };
+        t1.props = { delay_angle: 60, width: 120, freq: 50, ron: 0.001, roff: 1e6 };
         components.push(t1);
 
         const t2 = createComponent('Thyristor', { x: ox + 90, y: oy + 60 }, { x: ox + 180, y: oy + 60 });
-        t2.props = { delay_angle: 180, width: 30, freq: 50, ron: 0.001, roff: 1e6 };
+        t2.props = { delay_angle: 180, width: 120, freq: 50, ron: 0.001, roff: 1e6 };
         components.push(t2);
 
         const t3 = createComponent('Thyristor', { x: ox + 90, y: oy + 120 }, { x: ox + 180, y: oy + 120 });
-        t3.props = { delay_angle: 300, width: 30, freq: 50, ron: 0.001, roff: 1e6 };
+        t3.props = { delay_angle: 300, width: 120, freq: 50, ron: 0.001, roff: 1e6 };
         components.push(t3);
 
         components.push(createComponent('Wire', { x: ox + 180, y: oy }, { x: ox + 180, y: oy + 60 }));
@@ -2369,15 +2364,15 @@ function loadPreset(name) {
     } else if (name === 'three_phase_semi_converter') {
         const ox = 90, oy = 90;
 
-        const va = createComponent('V_AC', { x: ox, y: oy + 120 }, { x: ox + 90, y: oy + 60 });
+        const va = createComponent('V_AC', { x: ox + 90, y: oy + 60 }, { x: ox, y: oy + 120 });
         va.props = { amplitude: 325, freq: 50, phase: 0 };
         components.push(va);
 
-        const vb = createComponent('V_AC', { x: ox, y: oy + 120 }, { x: ox + 90, y: oy + 120 });
+        const vb = createComponent('V_AC', { x: ox + 90, y: oy + 120 }, { x: ox, y: oy + 120 });
         vb.props = { amplitude: 325, freq: 50, phase: -120 };
         components.push(vb);
 
-        const vc = createComponent('V_AC', { x: ox, y: oy + 120 }, { x: ox + 90, y: oy + 180 });
+        const vc = createComponent('V_AC', { x: ox + 90, y: oy + 180 }, { x: ox, y: oy + 120 });
         vc.props = { amplitude: 325, freq: 50, phase: 120 };
         components.push(vc);
 
@@ -2386,15 +2381,15 @@ function loadPreset(name) {
         components.push(createComponent('Wire', { x: ox + 90, y: oy + 180 }, { x: ox + 300, y: oy + 180 }));
 
         const t1 = createComponent('Thyristor', { x: ox + 180, y: oy + 60 }, { x: ox + 180, y: oy });
-        t1.props = { delay_angle: 60, width: 30, freq: 50, ron: 0.001, roff: 1e6 };
+        t1.props = { delay_angle: 60, width: 60, freq: 50, ron: 0.001, roff: 1e6 };
         components.push(t1);
 
         const t3 = createComponent('Thyristor', { x: ox + 240, y: oy + 120 }, { x: ox + 240, y: oy });
-        t3.props = { delay_angle: 180, width: 30, freq: 50, ron: 0.001, roff: 1e6 };
+        t3.props = { delay_angle: 180, width: 60, freq: 50, ron: 0.001, roff: 1e6 };
         components.push(t3);
 
         const t5 = createComponent('Thyristor', { x: ox + 300, y: oy + 180 }, { x: ox + 300, y: oy });
-        t5.props = { delay_angle: 300, width: 30, freq: 50, ron: 0.001, roff: 1e6 };
+        t5.props = { delay_angle: 300, width: 60, freq: 50, ron: 0.001, roff: 1e6 };
         components.push(t5);
 
         components.push(createComponent('Diode', { x: ox + 180, y: oy + 240 }, { x: ox + 180, y: oy + 60 }));

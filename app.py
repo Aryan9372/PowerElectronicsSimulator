@@ -157,12 +157,16 @@ def simulate_custom(req: CustomSimulationRequest):
         # Node statistics
         for node, v_arr in results['nodes'].items():
             if len(v_arr) > 0:
+                v_avg = float(np.mean(v_arr))
+                v_rms = float(np.sqrt(np.mean(v_arr**2)))
+                v_rf = float(np.sqrt(max(0.0, (v_rms / abs(v_avg))**2 - 1.0))) if abs(v_avg) > 1e-6 else 0.0
                 stats[f"V({node})"] = {
-                    "avg": round(float(np.mean(v_arr)), 2),
-                    "rms": round(float(np.sqrt(np.mean(v_arr**2))), 2),
+                    "avg": round(v_avg, 2),
+                    "rms": round(v_rms, 2),
                     "pk_pk": round(float(np.ptp(v_arr)), 2),
                     "max": round(float(np.max(v_arr)), 2),
-                    "min": round(float(np.min(v_arr)), 2)
+                    "min": round(float(np.min(v_arr)), 2),
+                    "rf": round(v_rf, 3)
                 }
                 
         # Branch statistics
@@ -170,12 +174,16 @@ def simulate_custom(req: CustomSimulationRequest):
             v_arr = results['branch_v'].get(comp_name, np.zeros_like(i_arr))
             p_arr = results['branch_p'].get(comp_name, np.zeros_like(i_arr))
             if len(i_arr) > 0:
+                i_avg = float(np.mean(i_arr))
+                i_rms = float(np.sqrt(np.mean(i_arr**2)))
+                i_rf = float(np.sqrt(max(0.0, (i_rms / abs(i_avg))**2 - 1.0))) if abs(i_avg) > 1e-6 else 0.0
                 stats[f"I({comp_name})"] = {
-                    "avg": round(float(np.mean(i_arr)), 3),
-                    "rms": round(float(np.sqrt(np.mean(i_arr**2))), 3),
+                    "avg": round(i_avg, 3),
+                    "rms": round(i_rms, 3),
                     "max": round(float(np.max(i_arr)), 3),
                     "min": round(float(np.min(i_arr)), 3),
-                    "p_avg": round(float(np.mean(p_arr)), 2)
+                    "p_avg": round(float(np.mean(p_arr)), 2),
+                    "rf": round(i_rf, 3)
                 }
 
         json_results = {
