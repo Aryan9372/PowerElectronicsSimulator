@@ -41,13 +41,6 @@ let spacePressed = false;
 // Cached Netlist Topology (for 60 FPS performance)
 let cachedNetData = null;
 
-// Real-Time Playback & Animation State
-let isPlaying = true;
-let simPlaybackTime = 0.0; // Current time in seconds within AC cycle
-let simCyclePeriod = 0.02; // 20 ms (50 Hz default, 1 cycle = 360 deg)
-let simSpeed = 0.5; // Default playback speed
-let lastFrameTime = performance.now();
-let particlePhase = 0;
 
 // Simulation Results Cache
 let lastSimResults = null;
@@ -94,6 +87,198 @@ function snapToGrid(worldX, worldY) {
 
 function invalidateNets() {
     cachedNetData = null;
+}
+
+// -------------------------------------------------------------
+// Component Data Structures
+// -------------------------------------------------------------
+function createComponent(type, p1, p2) {
+    const id = getNextId(type);
+    const comp = {
+        id: id,
+        type: type,
+        p1: { x: p1.x, y: p1.y },
+        p2: { x: p2.x, y: p2.y },
+        rotation: 0,
+        props: getDefaultProps(type)
+    };
+    invalidateNets();
+    return comp;
+}
+
+function getNextId(type) {
+    const prefixMap = {
+        'Resistor': 'R',
+        'Inductor': 'L',
+        'Capacitor': 'C',
+        'V_AC': 'V_ac',
+        'V_DC': 'V_dc',
+        'Diode': 'D',
+        'Thyristor': 'T',
+        'MOSFET': 'M',
+        'Wire': 'W'
+    };
+    const prefix = prefixMap[type] || 'U';
+    return `${prefix}${compIdCounter++}`;
+}
+
+function getDefaultProps(type) {
+    switch (type) {
+        case 'Resistor':
+            return { value: 20 }; // Ohms
+        case 'Inductor':
+            return { value: 45 }; // mH
+        case 'Capacitor':
+            return { value: 220, v0: 0 }; // uF
+        case 'V_AC':
+            return { amplitude: 325, freq: 50, phase: 0 }; // ~230V RMS
+        case 'V_DC':
+            return { value: 100 }; // Volts
+        case 'Diode':
+            return { ron: 0.001, roff: 1e6 };
+        case 'Thyristor':
+            return { delay_angle: 45, width: 20, freq: 50, ron: 0.001, roff: 1e6 };
+        case 'MOSFET':
+            return { ctrl_type: 'pwm', freq: 5000, duty: 50, phase: 0, ron: 0.005, roff: 1e6, body_diode: true };
+        default:
+            return {};
+    }
+}
+
+// -------------------------------------------------------------
+// Netlist & Connectivity Analysis
+// -------------------------------------------------------------
+function computeElectricalNets() {
+    if (cachedNetData) return cachedNetData;
+
+    const parent = {};
+    function find(i) {
+        if (!parent[i]) parent[i] = i;
+        if (parent[i] === i) return i;
+        parent[i] = find(parent[i]);
+        return parent[i];
+    }
+    function union(i, j) {
+        const rootI = find(i);
+        const rootJ = find(j);
+        if (rootI !== rootJ) parent[rootI] = rootJ;
+    }
+
+    // Connect wires directly
+    components.forEach(c => {
+        const n1 = `N_${Math.round(c.p1.x/gridSize)}_${Math.round(c.p1.y/gridSize)}`;
+        const n2 = `N_${Math.round(c.p2.x/gridSize)}_${Math.round(c.p2.y/gridSize)}`;
+        find(n1); find(n2);
+        if (c.type === 'Wire') {
+            union(n1, n2);
+        }
+    });
+
+    // Merge all ground nodes into 'GND'
+    groundNodes.forEach(gId => {
+        union(gId, 'GND');
+    });
+
+    const netMap = {};
+    let netCounter = 1;
+    const netRoots = {};
+
+    const gndRoot = find('GND');
+    netRoots[gndRoot] = 'GND';
+
+    components.forEach(c => {
+        [c.p1, c.p2].forEach(p => {
+            const nodeId = `N_${Math.round(p.x/gridSize)}_${Math.round(p.y/gridSize)}`;
+            const root = find(nodeId);
+            if (!netRoots[root]) {
+                netRoots[root] = `N${netCounter++}`;
+            }
+            netMap[nodeId] = netRoots[root];
+        });
+    });
+
+    const pinCounts = {};
+    components.forEach(c => {
+        const k1 = `${c.p1.x},${c.p1.y}`;
+        const k2 = `${c.p2.x},${c.p2.y}`;
+        pinCounts[k1] = (pinCounts[k1] || 0) + 1;
+        pinCounts[k2] = (pinCounts[k2] || 0) + 1;
+    });
+
+    cachedNetData = { netMap, pinCounts };
+    return cachedNetData;
+}
+
+// -------------------------------------------------------------
+// Playback & Speed Controls
+// -------------------------------------------------------------
+function togglePlayPause() {
+    isPlaying = !isPlaying;
+    const btn = document.getElementById('playPauseBtn');
+    const icon = document.getElementById('playIcon');
+    const label = document.getElementById('playLabel');
+
+    if (isPlaying) {
+        if (btn) btn.className = "px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold flex items-center gap-1.5 shadow-md shadow-emerald-600/30 transition text-xs";
+        if (icon) icon.className = "fa-solid fa-pause";
+        if (label) label.innerText = "Pause";
+    } else {
+        if (btn) btn.className = "px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold flex items-center gap-1.5 border border-slate-700 transition text-xs";
+        if (icon) icon.className = "fa-solid fa-play";
+        if (label) label.innerText = "Run Real-Time";
+    }
+}
+
+function setSimSpeed(speed) {
+    simSpeed = Math.max(0.01, Math.min(2.0, speed));
+    const slider = document.getElementById('speedSlider');
+    if (slider) slider.value = simSpeed;
+    const disp = document.getElementById('speedValueDisplay');
+    if (disp) disp.innerText = `${simSpeed.toFixed(2)}x`;
+
+    const allSpeedBtns = document.querySelectorAll('.speed-btn');
+    allSpeedBtns.forEach(btn => {
+        btn.classList.remove('bg-cyan-900', 'border-cyan-500', 'text-white', 'font-bold');
+        btn.classList.add('bg-slate-800', 'border-slate-700', 'text-slate-300');
+    });
+    const activeBtn = document.getElementById(`speed-${speed}`);
+    if (activeBtn) {
+        activeBtn.classList.remove('bg-slate-800', 'border-slate-700', 'text-slate-300');
+        activeBtn.classList.add('bg-cyan-900', 'border-cyan-500', 'text-white', 'font-bold');
+    }
+}
+
+// -------------------------------------------------------------
+// Topologies Library Modal Controls
+// -------------------------------------------------------------
+function openPresetsModal() {
+    const modal = document.getElementById('presetsModal');
+    if (modal) modal.classList.remove('hidden');
+}
+
+function closePresetsModal() {
+    const modal = document.getElementById('presetsModal');
+    if (modal) modal.classList.add('hidden');
+}
+
+function switchPresetTab(tabId) {
+    const tabs = ['dc_dc', 'rect_1ph', 'rect_3ph', 'inverters'];
+    tabs.forEach(t => {
+        const tabBtn = document.getElementById(`ptab-${t}`);
+        const sec = document.getElementById(`psec-${t}`);
+        if (t === tabId) {
+            if (tabBtn) tabBtn.className = 'preset-tab active px-3 py-2 border-b-2 border-cyan-400 font-bold text-cyan-400 flex items-center gap-1.5';
+            if (sec) sec.classList.remove('hidden');
+        } else {
+            if (tabBtn) tabBtn.className = 'preset-tab px-3 py-2 border-b-2 border-transparent text-slate-400 hover:text-white flex items-center gap-1.5';
+            if (sec) sec.classList.add('hidden');
+        }
+    });
+}
+
+function loadAndClosePreset(name) {
+    loadPreset(name);
+    closePresetsModal();
 }
 
 // Real-Time Playback & Animation State
@@ -261,39 +446,6 @@ function renderCanvas() {
     ctx.restore();
 }
 
-    // 8. Active Interaction Previews
-    if (currentTool === 'Wire' && isMouseDown && wireStartNode) {
-        const p1 = wireStartNode;
-        const p2 = snapToGrid(currentMousePos.x, currentMousePos.y);
-        ctx.strokeStyle = '#22d3ee';
-        ctx.lineWidth = 2.5;
-        ctx.setLineDash([4, 4]);
-        ctx.beginPath();
-        ctx.moveTo(p1.x, p1.y);
-        ctx.lineTo(p2.x, p2.y);
-        ctx.stroke();
-        ctx.setLineDash([]);
-        drawSnapHalo(p2.x, p2.y);
-    } else if (currentTool !== 'select' && currentTool !== 'probe_v' && currentTool !== 'Ground' && isMouseDown && wireStartNode) {
-        const p1 = wireStartNode;
-        const p2 = snapToGrid(currentMousePos.x, currentMousePos.y);
-        ctx.strokeStyle = 'rgba(6, 182, 212, 0.7)';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(p1.x, p1.y);
-        ctx.lineTo(p2.x, p2.y);
-        ctx.stroke();
-    }
-
-    if (hoveredNode) {
-        drawSnapHalo(hoveredNode.x, hoveredNode.y);
-    }
-
-    // Update Conduction Badge Status in HUD
-    updateConductionStatusText(activeConductors);
-
-    ctx.restore();
-}
 
 function getSimulationStepIndex() {
     if (!lastSimResults || !lastSimResults.time || lastSimResults.time.length === 0) return 0;
@@ -1136,6 +1288,7 @@ async function runSimulation(isBackgroundAuto = false) {
             item.amplitude = c.props.amplitude;
             item.freq = c.props.freq;
             item.phase = (c.props.phase || 0) * Math.PI / 180.0;
+            item.phase_unit = 'rad';
         } else if (c.type === 'V_DC') {
             item.value = c.props.value;
         } else if (c.type === 'Diode') {
@@ -1431,8 +1584,10 @@ function loadPreset(name) {
     activeChannels.clear();
     compIdCounter = 1;
 
-    if (name === 'full_bridge_thyristor') {
-        // Matches user reference screenshot exactly
+    // ---------------------------------------------------------
+    // 1. Single-Phase Full-Bridge Thyristor Rectifier (Reference)
+    // ---------------------------------------------------------
+    if (name === 'full_bridge_thyristor' || name === 'scr_bridge') {
         const ox = 150, oy = 90;
 
         components.push(createComponent('V_AC', { x: ox, y: oy + 90 }, { x: ox, y: oy + 150 }));
@@ -1471,7 +1626,10 @@ function loadPreset(name) {
 
         groundNodes.add(`N_${Math.round((ox + 270)/gridSize)}_${Math.round((oy + 240)/gridSize)}`);
 
-    } else if (name === 'mosfet_buck') {
+    // ---------------------------------------------------------
+    // 2. DC-DC Buck Converter
+    // ---------------------------------------------------------
+    } else if (name === 'mosfet_buck' || name === 'buck') {
         const ox = 150, oy = 120;
 
         const vdc = createComponent('V_DC', { x: ox, y: oy + 120 }, { x: ox, y: oy });
@@ -1504,15 +1662,643 @@ function loadPreset(name) {
 
         groundNodes.add(`N_${Math.round((ox + 90)/gridSize)}_${Math.round((oy + 120)/gridSize)}`);
 
-    } else if (name === 'half_wave') {
+    // ---------------------------------------------------------
+    // 3. DC-DC Boost Converter
+    // ---------------------------------------------------------
+    } else if (name === 'mosfet_boost' || name === 'boost') {
+        const ox = 150, oy = 120;
+
+        const vdc = createComponent('V_DC', { x: ox, y: oy + 120 }, { x: ox, y: oy });
+        vdc.props = { value: 48 };
+        components.push(vdc);
+
+        const l1 = createComponent('Inductor', { x: ox, y: oy }, { x: ox + 90, y: oy });
+        l1.props = { value: 10 };
+        components.push(l1);
+
+        const m1 = createComponent('MOSFET', { x: ox + 90, y: oy }, { x: ox + 90, y: oy + 120 });
+        m1.props = { ctrl_type: 'pwm', freq: 5000, duty: 50, phase: 0, ron: 0.005, roff: 1e6, body_diode: true };
+        components.push(m1);
+
+        const d1 = createComponent('Diode', { x: ox + 90, y: oy }, { x: ox + 180, y: oy });
+        components.push(d1);
+
+        const c1 = createComponent('Capacitor', { x: ox + 180, y: oy }, { x: ox + 180, y: oy + 120 });
+        c1.props = { value: 220, v0: 96 };
+        components.push(c1);
+
+        const r1 = createComponent('Resistor', { x: ox + 240, y: oy }, { x: ox + 240, y: oy + 120 });
+        r1.props = { value: 25 };
+        components.push(r1);
+
+        components.push(createComponent('Wire', { x: ox + 180, y: oy }, { x: ox + 240, y: oy }));
+        components.push(createComponent('Wire', { x: ox, y: oy + 120 }, { x: ox + 90, y: oy + 120 }));
+        components.push(createComponent('Wire', { x: ox + 90, y: oy + 120 }, { x: ox + 180, y: oy + 120 }));
+        components.push(createComponent('Wire', { x: ox + 180, y: oy + 120 }, { x: ox + 240, y: oy + 120 }));
+
+        groundNodes.add(`N_${Math.round((ox + 90)/gridSize)}_${Math.round((oy + 120)/gridSize)}`);
+
+    // ---------------------------------------------------------
+    // 4. DC-DC Buck-Boost Converter
+    // ---------------------------------------------------------
+    } else if (name === 'buck_boost') {
+        const ox = 150, oy = 120;
+
+        const vdc = createComponent('V_DC', { x: ox, y: oy + 120 }, { x: ox, y: oy });
+        vdc.props = { value: 50 };
+        components.push(vdc);
+
+        const m1 = createComponent('MOSFET', { x: ox, y: oy }, { x: ox + 90, y: oy });
+        m1.props = { ctrl_type: 'pwm', freq: 5000, duty: 50, phase: 0, ron: 0.005, roff: 1e6, body_diode: true };
+        components.push(m1);
+
+        const l1 = createComponent('Inductor', { x: ox + 90, y: oy }, { x: ox + 90, y: oy + 120 });
+        l1.props = { value: 8 };
+        components.push(l1);
+
+        const d1 = createComponent('Diode', { x: ox + 180, y: oy }, { x: ox + 90, y: oy });
+        components.push(d1);
+
+        const c1 = createComponent('Capacitor', { x: ox + 180, y: oy }, { x: ox + 180, y: oy + 120 });
+        c1.props = { value: 220, v0: -50 };
+        components.push(c1);
+
+        const r1 = createComponent('Resistor', { x: ox + 240, y: oy }, { x: ox + 240, y: oy + 120 });
+        r1.props = { value: 20 };
+        components.push(r1);
+
+        components.push(createComponent('Wire', { x: ox + 180, y: oy }, { x: ox + 240, y: oy }));
+        components.push(createComponent('Wire', { x: ox, y: oy + 120 }, { x: ox + 90, y: oy + 120 }));
+        components.push(createComponent('Wire', { x: ox + 90, y: oy + 120 }, { x: ox + 180, y: oy + 120 }));
+        components.push(createComponent('Wire', { x: ox + 180, y: oy + 120 }, { x: ox + 240, y: oy + 120 }));
+
+        groundNodes.add(`N_${Math.round((ox + 90)/gridSize)}_${Math.round((oy + 120)/gridSize)}`);
+
+    // ---------------------------------------------------------
+    // 5. DC-DC Cuk Converter
+    // ---------------------------------------------------------
+    } else if (name === 'cuk') {
+        const ox = 120, oy = 120;
+
+        const vdc = createComponent('V_DC', { x: ox, y: oy + 120 }, { x: ox, y: oy });
+        vdc.props = { value: 50 };
+        components.push(vdc);
+
+        const l1 = createComponent('Inductor', { x: ox, y: oy }, { x: ox + 90, y: oy });
+        l1.props = { value: 10 };
+        components.push(l1);
+
+        const m1 = createComponent('MOSFET', { x: ox + 90, y: oy }, { x: ox + 90, y: oy + 120 });
+        m1.props = { ctrl_type: 'pwm', freq: 5000, duty: 50, phase: 0, ron: 0.005, roff: 1e6, body_diode: true };
+        components.push(m1);
+
+        const c1 = createComponent('Capacitor', { x: ox + 90, y: oy }, { x: ox + 180, y: oy });
+        c1.props = { value: 47, v0: 100 };
+        components.push(c1);
+
+        const d1 = createComponent('Diode', { x: ox + 180, y: oy }, { x: ox + 180, y: oy + 120 });
+        components.push(d1);
+
+        const l2 = createComponent('Inductor', { x: ox + 180, y: oy }, { x: ox + 270, y: oy });
+        l2.props = { value: 10 };
+        components.push(l2);
+
+        const c2 = createComponent('Capacitor', { x: ox + 270, y: oy }, { x: ox + 270, y: oy + 120 });
+        c2.props = { value: 220, v0: -50 };
+        components.push(c2);
+
+        const r1 = createComponent('Resistor', { x: ox + 330, y: oy }, { x: ox + 330, y: oy + 120 });
+        r1.props = { value: 20 };
+        components.push(r1);
+
+        components.push(createComponent('Wire', { x: ox + 270, y: oy }, { x: ox + 330, y: oy }));
+        components.push(createComponent('Wire', { x: ox, y: oy + 120 }, { x: ox + 90, y: oy + 120 }));
+        components.push(createComponent('Wire', { x: ox + 90, y: oy + 120 }, { x: ox + 180, y: oy + 120 }));
+        components.push(createComponent('Wire', { x: ox + 180, y: oy + 120 }, { x: ox + 270, y: oy + 120 }));
+        components.push(createComponent('Wire', { x: ox + 270, y: oy + 120 }, { x: ox + 330, y: oy + 120 }));
+
+        groundNodes.add(`N_${Math.round((ox + 90)/gridSize)}_${Math.round((oy + 120)/gridSize)}`);
+
+    // ---------------------------------------------------------
+    // 6. DC-DC SEPIC Converter
+    // ---------------------------------------------------------
+    } else if (name === 'sepic') {
+        const ox = 120, oy = 120;
+
+        const vdc = createComponent('V_DC', { x: ox, y: oy + 120 }, { x: ox, y: oy });
+        vdc.props = { value: 48 };
+        components.push(vdc);
+
+        const l1 = createComponent('Inductor', { x: ox, y: oy }, { x: ox + 90, y: oy });
+        l1.props = { value: 10 };
+        components.push(l1);
+
+        const m1 = createComponent('MOSFET', { x: ox + 90, y: oy }, { x: ox + 90, y: oy + 120 });
+        m1.props = { ctrl_type: 'pwm', freq: 5000, duty: 50, phase: 0, ron: 0.005, roff: 1e6, body_diode: true };
+        components.push(m1);
+
+        const c1 = createComponent('Capacitor', { x: ox + 90, y: oy }, { x: ox + 180, y: oy });
+        c1.props = { value: 47, v0: 48 };
+        components.push(c1);
+
+        const l2 = createComponent('Inductor', { x: ox + 180, y: oy }, { x: ox + 180, y: oy + 120 });
+        l2.props = { value: 10 };
+        components.push(l2);
+
+        const d1 = createComponent('Diode', { x: ox + 180, y: oy }, { x: ox + 270, y: oy });
+        components.push(d1);
+
+        const c2 = createComponent('Capacitor', { x: ox + 270, y: oy }, { x: ox + 270, y: oy + 120 });
+        c2.props = { value: 220, v0: 48 };
+        components.push(c2);
+
+        const r1 = createComponent('Resistor', { x: ox + 330, y: oy }, { x: ox + 330, y: oy + 120 });
+        r1.props = { value: 25 };
+        components.push(r1);
+
+        components.push(createComponent('Wire', { x: ox + 270, y: oy }, { x: ox + 330, y: oy }));
+        components.push(createComponent('Wire', { x: ox, y: oy + 120 }, { x: ox + 90, y: oy + 120 }));
+        components.push(createComponent('Wire', { x: ox + 90, y: oy + 120 }, { x: ox + 180, y: oy + 120 }));
+        components.push(createComponent('Wire', { x: ox + 180, y: oy + 120 }, { x: ox + 270, y: oy + 120 }));
+        components.push(createComponent('Wire', { x: ox + 270, y: oy + 120 }, { x: ox + 330, y: oy + 120 }));
+
+        groundNodes.add(`N_${Math.round((ox + 90)/gridSize)}_${Math.round((oy + 120)/gridSize)}`);
+
+    // ---------------------------------------------------------
+    // 7. 1-Phase Half-Wave Diode Rectifier
+    // ---------------------------------------------------------
+    } else if (name === 'half_wave' || name === 'half_wave_diode') {
         const ox = 180, oy = 120;
         components.push(createComponent('V_AC', { x: ox, y: oy + 120 }, { x: ox, y: oy }));
+        components.find(c => c.type === 'V_AC').props = { amplitude: 325, freq: 50, phase: 0 };
+
         components.push(createComponent('Diode', { x: ox, y: oy }, { x: ox + 90, y: oy }));
-        components.push(createComponent('Inductor', { x: ox + 90, y: oy }, { x: ox + 180, y: oy }));
-        components.push(createComponent('Resistor', { x: ox + 180, y: oy }, { x: ox + 180, y: oy + 120 }));
+
+        const l1 = createComponent('Inductor', { x: ox + 90, y: oy }, { x: ox + 180, y: oy });
+        l1.props = { value: 45 };
+        components.push(l1);
+
+        const r1 = createComponent('Resistor', { x: ox + 180, y: oy }, { x: ox + 180, y: oy + 120 });
+        r1.props = { value: 20 };
+        components.push(r1);
+
         components.push(createComponent('Wire', { x: ox, y: oy + 120 }, { x: ox + 180, y: oy + 120 }));
         groundNodes.add(`N_${Math.round(ox/gridSize)}_${Math.round((oy + 120)/gridSize)}`);
 
+    // ---------------------------------------------------------
+    // 8. 1-Phase Half-Wave Controlled SCR Rectifier
+    // ---------------------------------------------------------
+    } else if (name === 'half_wave_scr') {
+        const ox = 180, oy = 120;
+        components.push(createComponent('V_AC', { x: ox, y: oy + 120 }, { x: ox, y: oy }));
+        components.find(c => c.type === 'V_AC').props = { amplitude: 325, freq: 50, phase: 0 };
+
+        const t1 = createComponent('Thyristor', { x: ox, y: oy }, { x: ox + 90, y: oy });
+        t1.props = { delay_angle: 45, width: 25, freq: 50, ron: 0.001, roff: 1e6 };
+        components.push(t1);
+
+        const l1 = createComponent('Inductor', { x: ox + 90, y: oy }, { x: ox + 180, y: oy });
+        l1.props = { value: 45 };
+        components.push(l1);
+
+        const r1 = createComponent('Resistor', { x: ox + 180, y: oy }, { x: ox + 180, y: oy + 120 });
+        r1.props = { value: 20 };
+        components.push(r1);
+
+        components.push(createComponent('Wire', { x: ox, y: oy + 120 }, { x: ox + 180, y: oy + 120 }));
+        groundNodes.add(`N_${Math.round(ox/gridSize)}_${Math.round((oy + 120)/gridSize)}`);
+
+    // ---------------------------------------------------------
+    // 9. 1-Phase Full-Bridge Diode Rectifier
+    // ---------------------------------------------------------
+    } else if (name === 'full_bridge_diode') {
+        const ox = 150, oy = 90;
+        components.push(createComponent('V_AC', { x: ox, y: oy + 90 }, { x: ox, y: oy + 150 }));
+        components.find(c => c.type === 'V_AC').props = { amplitude: 325, freq: 50, phase: 0 };
+
+        components.push(createComponent('Diode', { x: ox + 90, y: oy + 90 }, { x: ox + 90, y: oy })); // D1
+        components.push(createComponent('Diode', { x: ox + 90, y: oy + 240 }, { x: ox + 90, y: oy + 90 })); // D4
+        components.push(createComponent('Diode', { x: ox + 180, y: oy + 150 }, { x: ox + 180, y: oy })); // D3
+        components.push(createComponent('Diode', { x: ox + 180, y: oy + 240 }, { x: ox + 180, y: oy + 150 })); // D2
+
+        components.push(createComponent('Wire', { x: ox, y: oy + 90 }, { x: ox + 90, y: oy + 90 }));
+        components.push(createComponent('Wire', { x: ox, y: oy + 150 }, { x: ox + 180, y: oy + 150 }));
+        components.push(createComponent('Wire', { x: ox + 90, y: oy }, { x: ox + 180, y: oy }));
+        components.push(createComponent('Wire', { x: ox + 180, y: oy }, { x: ox + 270, y: oy }));
+        components.push(createComponent('Wire', { x: ox + 90, y: oy + 240 }, { x: ox + 180, y: oy + 240 }));
+        components.push(createComponent('Wire', { x: ox + 180, y: oy + 240 }, { x: ox + 270, y: oy + 240 }));
+
+        const l1 = createComponent('Inductor', { x: ox + 270, y: oy }, { x: ox + 270, y: oy + 120 });
+        l1.props = { value: 45 };
+        components.push(l1);
+
+        const r1 = createComponent('Resistor', { x: ox + 270, y: oy + 120 }, { x: ox + 270, y: oy + 240 });
+        r1.props = { value: 20 };
+        components.push(r1);
+
+        groundNodes.add(`N_${Math.round((ox + 270)/gridSize)}_${Math.round((oy + 240)/gridSize)}`);
+
+    // ---------------------------------------------------------
+    // 10. 1-Phase Semi-Converter (2 SCR, 2 Diode + Freewheeling)
+    // ---------------------------------------------------------
+    } else if (name === 'semi_converter') {
+        const ox = 150, oy = 90;
+        components.push(createComponent('V_AC', { x: ox, y: oy + 90 }, { x: ox, y: oy + 150 }));
+        components.find(c => c.type === 'V_AC').props = { amplitude: 325, freq: 50, phase: 0 };
+
+        const t1 = createComponent('Thyristor', { x: ox + 90, y: oy + 90 }, { x: ox + 90, y: oy });
+        t1.props = { delay_angle: 45, width: 25, freq: 50, ron: 0.001, roff: 1e6 };
+        components.push(t1);
+
+        const d4 = createComponent('Diode', { x: ox + 90, y: oy + 240 }, { x: ox + 90, y: oy + 90 });
+        components.push(d4);
+
+        const t3 = createComponent('Thyristor', { x: ox + 180, y: oy + 150 }, { x: ox + 180, y: oy });
+        t3.props = { delay_angle: 225, width: 25, freq: 50, ron: 0.001, roff: 1e6 };
+        components.push(t3);
+
+        const d2 = createComponent('Diode', { x: ox + 180, y: oy + 240 }, { x: ox + 180, y: oy + 150 });
+        components.push(d2);
+
+        const dfw = createComponent('Diode', { x: ox + 240, y: oy + 240 }, { x: ox + 240, y: oy });
+        components.push(dfw);
+
+        components.push(createComponent('Wire', { x: ox, y: oy + 90 }, { x: ox + 90, y: oy + 90 }));
+        components.push(createComponent('Wire', { x: ox, y: oy + 150 }, { x: ox + 180, y: oy + 150 }));
+        components.push(createComponent('Wire', { x: ox + 90, y: oy }, { x: ox + 180, y: oy }));
+        components.push(createComponent('Wire', { x: ox + 180, y: oy }, { x: ox + 240, y: oy }));
+        components.push(createComponent('Wire', { x: ox + 240, y: oy }, { x: ox + 300, y: oy }));
+        components.push(createComponent('Wire', { x: ox + 90, y: oy + 240 }, { x: ox + 180, y: oy + 240 }));
+        components.push(createComponent('Wire', { x: ox + 180, y: oy + 240 }, { x: ox + 240, y: oy + 240 }));
+        components.push(createComponent('Wire', { x: ox + 240, y: oy + 240 }, { x: ox + 300, y: oy + 240 }));
+
+        const l1 = createComponent('Inductor', { x: ox + 300, y: oy }, { x: ox + 300, y: oy + 120 });
+        l1.props = { value: 45 };
+        components.push(l1);
+
+        const r1 = createComponent('Resistor', { x: ox + 300, y: oy + 120 }, { x: ox + 300, y: oy + 240 });
+        r1.props = { value: 20 };
+        components.push(r1);
+
+        groundNodes.add(`N_${Math.round((ox + 300)/gridSize)}_${Math.round((oy + 240)/gridSize)}`);
+
+    // ---------------------------------------------------------
+    // 11. 3-Phase 6-Diode Bridge Rectifier
+    // ---------------------------------------------------------
+    } else if (name === 'three_phase_bridge_diode') {
+        const ox = 90, oy = 90;
+
+        const va = createComponent('V_AC', { x: ox, y: oy + 120 }, { x: ox + 90, y: oy + 60 });
+        va.props = { amplitude: 325, freq: 50, phase: 0 };
+        components.push(va);
+
+        const vb = createComponent('V_AC', { x: ox, y: oy + 120 }, { x: ox + 90, y: oy + 120 });
+        vb.props = { amplitude: 325, freq: 50, phase: -120 };
+        components.push(vb);
+
+        const vc = createComponent('V_AC', { x: ox, y: oy + 120 }, { x: ox + 90, y: oy + 180 });
+        vc.props = { amplitude: 325, freq: 50, phase: 120 };
+        components.push(vc);
+
+        components.push(createComponent('Wire', { x: ox + 90, y: oy + 60 }, { x: ox + 180, y: oy + 60 }));
+        components.push(createComponent('Wire', { x: ox + 90, y: oy + 120 }, { x: ox + 240, y: oy + 120 }));
+        components.push(createComponent('Wire', { x: ox + 90, y: oy + 180 }, { x: ox + 300, y: oy + 180 }));
+
+        components.push(createComponent('Diode', { x: ox + 180, y: oy + 60 }, { x: ox + 180, y: oy })); // D1
+        components.push(createComponent('Diode', { x: ox + 240, y: oy + 120 }, { x: ox + 240, y: oy })); // D3
+        components.push(createComponent('Diode', { x: ox + 300, y: oy + 180 }, { x: ox + 300, y: oy })); // D5
+
+        components.push(createComponent('Diode', { x: ox + 180, y: oy + 240 }, { x: ox + 180, y: oy + 60 })); // D4
+        components.push(createComponent('Diode', { x: ox + 240, y: oy + 240 }, { x: ox + 240, y: oy + 120 })); // D6
+        components.push(createComponent('Diode', { x: ox + 300, y: oy + 240 }, { x: ox + 300, y: oy + 180 })); // D2
+
+        components.push(createComponent('Wire', { x: ox + 180, y: oy }, { x: ox + 240, y: oy }));
+        components.push(createComponent('Wire', { x: ox + 240, y: oy }, { x: ox + 300, y: oy }));
+        components.push(createComponent('Wire', { x: ox + 300, y: oy }, { x: ox + 360, y: oy }));
+
+        components.push(createComponent('Wire', { x: ox + 180, y: oy + 240 }, { x: ox + 240, y: oy + 240 }));
+        components.push(createComponent('Wire', { x: ox + 240, y: oy + 240 }, { x: ox + 300, y: oy + 240 }));
+        components.push(createComponent('Wire', { x: ox + 300, y: oy + 240 }, { x: ox + 360, y: oy + 240 }));
+
+        const l1 = createComponent('Inductor', { x: ox + 360, y: oy }, { x: ox + 360, y: oy + 120 });
+        l1.props = { value: 30 };
+        components.push(l1);
+
+        const r1 = createComponent('Resistor', { x: ox + 360, y: oy + 120 }, { x: ox + 360, y: oy + 240 });
+        r1.props = { value: 25 };
+        components.push(r1);
+
+        groundNodes.add(`N_${Math.round((ox + 360)/gridSize)}_${Math.round((oy + 240)/gridSize)}`);
+
+    // ---------------------------------------------------------
+    // 12. 3-Phase 6-Pulse SCR Bridge Rectifier
+    // ---------------------------------------------------------
+    } else if (name === 'three_phase_bridge_scr') {
+        const ox = 90, oy = 90;
+
+        const va = createComponent('V_AC', { x: ox, y: oy + 120 }, { x: ox + 90, y: oy + 60 });
+        va.props = { amplitude: 325, freq: 50, phase: 0 };
+        components.push(va);
+
+        const vb = createComponent('V_AC', { x: ox, y: oy + 120 }, { x: ox + 90, y: oy + 120 });
+        vb.props = { amplitude: 325, freq: 50, phase: -120 };
+        components.push(vb);
+
+        const vc = createComponent('V_AC', { x: ox, y: oy + 120 }, { x: ox + 90, y: oy + 180 });
+        vc.props = { amplitude: 325, freq: 50, phase: 120 };
+        components.push(vc);
+
+        components.push(createComponent('Wire', { x: ox + 90, y: oy + 60 }, { x: ox + 180, y: oy + 60 }));
+        components.push(createComponent('Wire', { x: ox + 90, y: oy + 120 }, { x: ox + 240, y: oy + 120 }));
+        components.push(createComponent('Wire', { x: ox + 90, y: oy + 180 }, { x: ox + 300, y: oy + 180 }));
+
+        const t1 = createComponent('Thyristor', { x: ox + 180, y: oy + 60 }, { x: ox + 180, y: oy });
+        t1.props = { delay_angle: 60, width: 30, freq: 50, ron: 0.001, roff: 1e6 };
+        components.push(t1);
+
+        const t3 = createComponent('Thyristor', { x: ox + 240, y: oy + 120 }, { x: ox + 240, y: oy });
+        t3.props = { delay_angle: 180, width: 30, freq: 50, ron: 0.001, roff: 1e6 };
+        components.push(t3);
+
+        const t5 = createComponent('Thyristor', { x: ox + 300, y: oy + 180 }, { x: ox + 300, y: oy });
+        t5.props = { delay_angle: 300, width: 30, freq: 50, ron: 0.001, roff: 1e6 };
+        components.push(t5);
+
+        const t4 = createComponent('Thyristor', { x: ox + 180, y: oy + 240 }, { x: ox + 180, y: oy + 60 });
+        t4.props = { delay_angle: 240, width: 30, freq: 50, ron: 0.001, roff: 1e6 };
+        components.push(t4);
+
+        const t6 = createComponent('Thyristor', { x: ox + 240, y: oy + 240 }, { x: ox + 240, y: oy + 120 });
+        t6.props = { delay_angle: 0, width: 30, freq: 50, ron: 0.001, roff: 1e6 };
+        components.push(t6);
+
+        const t2 = createComponent('Thyristor', { x: ox + 300, y: oy + 240 }, { x: ox + 300, y: oy + 180 });
+        t2.props = { delay_angle: 120, width: 30, freq: 50, ron: 0.001, roff: 1e6 };
+        components.push(t2);
+
+        components.push(createComponent('Wire', { x: ox + 180, y: oy }, { x: ox + 240, y: oy }));
+        components.push(createComponent('Wire', { x: ox + 240, y: oy }, { x: ox + 300, y: oy }));
+        components.push(createComponent('Wire', { x: ox + 300, y: oy }, { x: ox + 360, y: oy }));
+
+        components.push(createComponent('Wire', { x: ox + 180, y: oy + 240 }, { x: ox + 240, y: oy + 240 }));
+        components.push(createComponent('Wire', { x: ox + 240, y: oy + 240 }, { x: ox + 300, y: oy + 240 }));
+        components.push(createComponent('Wire', { x: ox + 300, y: oy + 240 }, { x: ox + 360, y: oy + 240 }));
+
+        const l1 = createComponent('Inductor', { x: ox + 360, y: oy }, { x: ox + 360, y: oy + 120 });
+        l1.props = { value: 45 };
+        components.push(l1);
+
+        const r1 = createComponent('Resistor', { x: ox + 360, y: oy + 120 }, { x: ox + 360, y: oy + 240 });
+        r1.props = { value: 20 };
+        components.push(r1);
+
+        groundNodes.add(`N_${Math.round((ox + 360)/gridSize)}_${Math.round((oy + 240)/gridSize)}`);
+
+    // ---------------------------------------------------------
+    // 13. 3-Phase Half-Wave Diode Rectifier
+    // ---------------------------------------------------------
+    } else if (name === 'three_phase_half_wave_diode') {
+        const ox = 120, oy = 90;
+
+        const va = createComponent('V_AC', { x: ox, y: oy + 180 }, { x: ox + 90, y: oy });
+        va.props = { amplitude: 325, freq: 50, phase: 0 };
+        components.push(va);
+
+        const vb = createComponent('V_AC', { x: ox, y: oy + 180 }, { x: ox + 90, y: oy + 60 });
+        vb.props = { amplitude: 325, freq: 50, phase: -120 };
+        components.push(vb);
+
+        const vc = createComponent('V_AC', { x: ox, y: oy + 180 }, { x: ox + 90, y: oy + 120 });
+        vc.props = { amplitude: 325, freq: 50, phase: 120 };
+        components.push(vc);
+
+        components.push(createComponent('Diode', { x: ox + 90, y: oy }, { x: ox + 180, y: oy }));
+        components.push(createComponent('Diode', { x: ox + 90, y: oy + 60 }, { x: ox + 180, y: oy + 60 }));
+        components.push(createComponent('Diode', { x: ox + 90, y: oy + 120 }, { x: ox + 180, y: oy + 120 }));
+
+        components.push(createComponent('Wire', { x: ox + 180, y: oy }, { x: ox + 180, y: oy + 60 }));
+        components.push(createComponent('Wire', { x: ox + 180, y: oy + 60 }, { x: ox + 180, y: oy + 120 }));
+        components.push(createComponent('Wire', { x: ox + 180, y: oy }, { x: ox + 240, y: oy }));
+
+        const l1 = createComponent('Inductor', { x: ox + 240, y: oy }, { x: ox + 240, y: oy + 90 });
+        l1.props = { value: 30 };
+        components.push(l1);
+
+        const r1 = createComponent('Resistor', { x: ox + 240, y: oy + 90 }, { x: ox + 240, y: oy + 180 });
+        r1.props = { value: 20 };
+        components.push(r1);
+
+        components.push(createComponent('Wire', { x: ox, y: oy + 180 }, { x: ox + 240, y: oy + 180 }));
+        groundNodes.add(`N_${Math.round(ox/gridSize)}_${Math.round((oy + 180)/gridSize)}`);
+
+    // ---------------------------------------------------------
+    // 14. 3-Phase Half-Wave Controlled SCR Rectifier
+    // ---------------------------------------------------------
+    } else if (name === 'three_phase_half_wave_scr') {
+        const ox = 120, oy = 90;
+
+        const va = createComponent('V_AC', { x: ox, y: oy + 180 }, { x: ox + 90, y: oy });
+        va.props = { amplitude: 325, freq: 50, phase: 0 };
+        components.push(va);
+
+        const vb = createComponent('V_AC', { x: ox, y: oy + 180 }, { x: ox + 90, y: oy + 60 });
+        vb.props = { amplitude: 325, freq: 50, phase: -120 };
+        components.push(vb);
+
+        const vc = createComponent('V_AC', { x: ox, y: oy + 180 }, { x: ox + 90, y: oy + 120 });
+        vc.props = { amplitude: 325, freq: 50, phase: 120 };
+        components.push(vc);
+
+        const t1 = createComponent('Thyristor', { x: ox + 90, y: oy }, { x: ox + 180, y: oy });
+        t1.props = { delay_angle: 60, width: 30, freq: 50, ron: 0.001, roff: 1e6 };
+        components.push(t1);
+
+        const t2 = createComponent('Thyristor', { x: ox + 90, y: oy + 60 }, { x: ox + 180, y: oy + 60 });
+        t2.props = { delay_angle: 180, width: 30, freq: 50, ron: 0.001, roff: 1e6 };
+        components.push(t2);
+
+        const t3 = createComponent('Thyristor', { x: ox + 90, y: oy + 120 }, { x: ox + 180, y: oy + 120 });
+        t3.props = { delay_angle: 300, width: 30, freq: 50, ron: 0.001, roff: 1e6 };
+        components.push(t3);
+
+        components.push(createComponent('Wire', { x: ox + 180, y: oy }, { x: ox + 180, y: oy + 60 }));
+        components.push(createComponent('Wire', { x: ox + 180, y: oy + 60 }, { x: ox + 180, y: oy + 120 }));
+        components.push(createComponent('Wire', { x: ox + 180, y: oy }, { x: ox + 240, y: oy }));
+
+        const l1 = createComponent('Inductor', { x: ox + 240, y: oy }, { x: ox + 240, y: oy + 90 });
+        l1.props = { value: 30 };
+        components.push(l1);
+
+        const r1 = createComponent('Resistor', { x: ox + 240, y: oy + 90 }, { x: ox + 240, y: oy + 180 });
+        r1.props = { value: 20 };
+        components.push(r1);
+
+        components.push(createComponent('Wire', { x: ox, y: oy + 180 }, { x: ox + 240, y: oy + 180 }));
+        groundNodes.add(`N_${Math.round(ox/gridSize)}_${Math.round((oy + 180)/gridSize)}`);
+
+    // ---------------------------------------------------------
+    // 15. 3-Phase Semi-Converter (3 SCR, 3 Diode + FWD)
+    // ---------------------------------------------------------
+    } else if (name === 'three_phase_semi_converter') {
+        const ox = 90, oy = 90;
+
+        const va = createComponent('V_AC', { x: ox, y: oy + 120 }, { x: ox + 90, y: oy + 60 });
+        va.props = { amplitude: 325, freq: 50, phase: 0 };
+        components.push(va);
+
+        const vb = createComponent('V_AC', { x: ox, y: oy + 120 }, { x: ox + 90, y: oy + 120 });
+        vb.props = { amplitude: 325, freq: 50, phase: -120 };
+        components.push(vb);
+
+        const vc = createComponent('V_AC', { x: ox, y: oy + 120 }, { x: ox + 90, y: oy + 180 });
+        vc.props = { amplitude: 325, freq: 50, phase: 120 };
+        components.push(vc);
+
+        components.push(createComponent('Wire', { x: ox + 90, y: oy + 60 }, { x: ox + 180, y: oy + 60 }));
+        components.push(createComponent('Wire', { x: ox + 90, y: oy + 120 }, { x: ox + 240, y: oy + 120 }));
+        components.push(createComponent('Wire', { x: ox + 90, y: oy + 180 }, { x: ox + 300, y: oy + 180 }));
+
+        const t1 = createComponent('Thyristor', { x: ox + 180, y: oy + 60 }, { x: ox + 180, y: oy });
+        t1.props = { delay_angle: 60, width: 30, freq: 50, ron: 0.001, roff: 1e6 };
+        components.push(t1);
+
+        const t3 = createComponent('Thyristor', { x: ox + 240, y: oy + 120 }, { x: ox + 240, y: oy });
+        t3.props = { delay_angle: 180, width: 30, freq: 50, ron: 0.001, roff: 1e6 };
+        components.push(t3);
+
+        const t5 = createComponent('Thyristor', { x: ox + 300, y: oy + 180 }, { x: ox + 300, y: oy });
+        t5.props = { delay_angle: 300, width: 30, freq: 50, ron: 0.001, roff: 1e6 };
+        components.push(t5);
+
+        components.push(createComponent('Diode', { x: ox + 180, y: oy + 240 }, { x: ox + 180, y: oy + 60 }));
+        components.push(createComponent('Diode', { x: ox + 240, y: oy + 240 }, { x: ox + 240, y: oy + 120 }));
+        components.push(createComponent('Diode', { x: ox + 300, y: oy + 240 }, { x: ox + 300, y: oy + 180 }));
+
+        components.push(createComponent('Diode', { x: ox + 360, y: oy + 240 }, { x: ox + 360, y: oy }));
+
+        components.push(createComponent('Wire', { x: ox + 180, y: oy }, { x: ox + 240, y: oy }));
+        components.push(createComponent('Wire', { x: ox + 240, y: oy }, { x: ox + 300, y: oy }));
+        components.push(createComponent('Wire', { x: ox + 300, y: oy }, { x: ox + 360, y: oy }));
+        components.push(createComponent('Wire', { x: ox + 360, y: oy }, { x: ox + 420, y: oy }));
+
+        components.push(createComponent('Wire', { x: ox + 180, y: oy + 240 }, { x: ox + 240, y: oy + 240 }));
+        components.push(createComponent('Wire', { x: ox + 240, y: oy + 240 }, { x: ox + 300, y: oy + 240 }));
+        components.push(createComponent('Wire', { x: ox + 300, y: oy + 240 }, { x: ox + 360, y: oy + 240 }));
+        components.push(createComponent('Wire', { x: ox + 360, y: oy + 240 }, { x: ox + 420, y: oy + 240 }));
+
+        const l1 = createComponent('Inductor', { x: ox + 420, y: oy }, { x: ox + 420, y: oy + 120 });
+        l1.props = { value: 30 };
+        components.push(l1);
+
+        const r1 = createComponent('Resistor', { x: ox + 420, y: oy + 120 }, { x: ox + 420, y: oy + 240 });
+        r1.props = { value: 20 };
+        components.push(r1);
+
+        groundNodes.add(`N_${Math.round((ox + 420)/gridSize)}_${Math.round((oy + 240)/gridSize)}`);
+
+    // ---------------------------------------------------------
+    // 16. 1-Phase H-Bridge Inverter (4 MOSFETs)
+    // ---------------------------------------------------------
+    } else if (name === 'h_bridge_inverter') {
+        const ox = 150, oy = 90;
+
+        const vdc = createComponent('V_DC', { x: ox, y: oy + 240 }, { x: ox, y: oy });
+        vdc.props = { value: 300 };
+        components.push(vdc);
+
+        const m1 = createComponent('MOSFET', { x: ox + 90, y: oy }, { x: ox + 90, y: oy + 120 });
+        m1.props = { ctrl_type: 'pwm', freq: 50, duty: 50, phase: 0, ron: 0.005, roff: 1e6, body_diode: true };
+        components.push(m1);
+
+        const m4 = createComponent('MOSFET', { x: ox + 90, y: oy + 120 }, { x: ox + 90, y: oy + 240 });
+        m4.props = { ctrl_type: 'pwm', freq: 50, duty: 50, phase: 180, ron: 0.005, roff: 1e6, body_diode: true };
+        components.push(m4);
+
+        const m3 = createComponent('MOSFET', { x: ox + 240, y: oy }, { x: ox + 240, y: oy + 120 });
+        m3.props = { ctrl_type: 'pwm', freq: 50, duty: 50, phase: 180, ron: 0.005, roff: 1e6, body_diode: true };
+        components.push(m3);
+
+        const m2 = createComponent('MOSFET', { x: ox + 240, y: oy + 120 }, { x: ox + 240, y: oy + 240 });
+        m2.props = { ctrl_type: 'pwm', freq: 50, duty: 50, phase: 0, ron: 0.005, roff: 1e6, body_diode: true };
+        components.push(m2);
+
+        components.push(createComponent('Wire', { x: ox, y: oy }, { x: ox + 90, y: oy }));
+        components.push(createComponent('Wire', { x: ox + 90, y: oy }, { x: ox + 240, y: oy }));
+        components.push(createComponent('Wire', { x: ox, y: oy + 240 }, { x: ox + 90, y: oy + 240 }));
+        components.push(createComponent('Wire', { x: ox + 90, y: oy + 240 }, { x: ox + 240, y: oy + 240 }));
+
+        const l1 = createComponent('Inductor', { x: ox + 90, y: oy + 120 }, { x: ox + 165, y: oy + 120 });
+        l1.props = { value: 15 };
+        components.push(l1);
+
+        const r1 = createComponent('Resistor', { x: ox + 165, y: oy + 120 }, { x: ox + 240, y: oy + 120 });
+        r1.props = { value: 10 };
+        components.push(r1);
+
+        groundNodes.add(`N_${Math.round(ox/gridSize)}_${Math.round((oy + 240)/gridSize)}`);
+
+    // ---------------------------------------------------------
+    // 17. 3-Phase Inverter (6 MOSFETs)
+    // ---------------------------------------------------------
+    } else if (name === 'three_phase_inverter') {
+        const ox = 120, oy = 90;
+
+        const vdc = createComponent('V_DC', { x: ox, y: oy + 240 }, { x: ox, y: oy });
+        vdc.props = { value: 300 };
+        components.push(vdc);
+
+        const m1 = createComponent('MOSFET', { x: ox + 90, y: oy }, { x: ox + 90, y: oy + 120 });
+        m1.props = { ctrl_type: 'pwm', freq: 50, duty: 50, phase: 0, ron: 0.005, roff: 1e6, body_diode: true };
+        components.push(m1);
+
+        const m4 = createComponent('MOSFET', { x: ox + 90, y: oy + 120 }, { x: ox + 90, y: oy + 240 });
+        m4.props = { ctrl_type: 'pwm', freq: 50, duty: 50, phase: 180, ron: 0.005, roff: 1e6, body_diode: true };
+        components.push(m4);
+
+        const m3 = createComponent('MOSFET', { x: ox + 180, y: oy }, { x: ox + 180, y: oy + 120 });
+        m3.props = { ctrl_type: 'pwm', freq: 50, duty: 50, phase: 120, ron: 0.005, roff: 1e6, body_diode: true };
+        components.push(m3);
+
+        const m6 = createComponent('MOSFET', { x: ox + 180, y: oy + 120 }, { x: ox + 180, y: oy + 240 });
+        m6.props = { ctrl_type: 'pwm', freq: 50, duty: 50, phase: 300, ron: 0.005, roff: 1e6, body_diode: true };
+        components.push(m6);
+
+        const m5 = createComponent('MOSFET', { x: ox + 270, y: oy }, { x: ox + 270, y: oy + 120 });
+        m5.props = { ctrl_type: 'pwm', freq: 50, duty: 50, phase: 240, ron: 0.005, roff: 1e6, body_diode: true };
+        components.push(m5);
+
+        const m2 = createComponent('MOSFET', { x: ox + 270, y: oy + 120 }, { x: ox + 270, y: oy + 240 });
+        m2.props = { ctrl_type: 'pwm', freq: 50, duty: 50, phase: 60, ron: 0.005, roff: 1e6, body_diode: true };
+        components.push(m2);
+
+        components.push(createComponent('Wire', { x: ox, y: oy }, { x: ox + 90, y: oy }));
+        components.push(createComponent('Wire', { x: ox + 90, y: oy }, { x: ox + 180, y: oy }));
+        components.push(createComponent('Wire', { x: ox + 180, y: oy }, { x: ox + 270, y: oy }));
+
+        components.push(createComponent('Wire', { x: ox, y: oy + 240 }, { x: ox + 90, y: oy + 240 }));
+        components.push(createComponent('Wire', { x: ox + 90, y: oy + 240 }, { x: ox + 180, y: oy + 240 }));
+        components.push(createComponent('Wire', { x: ox + 180, y: oy + 240 }, { x: ox + 270, y: oy + 240 }));
+
+        components.push(createComponent('Wire', { x: ox + 90, y: oy + 120 }, { x: ox + 330, y: oy + 60 }));
+        const ra = createComponent('Resistor', { x: ox + 330, y: oy + 60 }, { x: ox + 390, y: oy + 120 });
+        ra.props = { value: 15 };
+        components.push(ra);
+
+        components.push(createComponent('Wire', { x: ox + 180, y: oy + 120 }, { x: ox + 330, y: oy + 120 }));
+        const rb = createComponent('Resistor', { x: ox + 330, y: oy + 120 }, { x: ox + 390, y: oy + 120 });
+        rb.props = { value: 15 };
+        components.push(rb);
+
+        components.push(createComponent('Wire', { x: ox + 270, y: oy + 120 }, { x: ox + 330, y: oy + 180 }));
+        const rc = createComponent('Resistor', { x: ox + 330, y: oy + 180 }, { x: ox + 390, y: oy + 120 });
+        rc.props = { value: 15 };
+        components.push(rc);
+
+        groundNodes.add(`N_${Math.round(ox/gridSize)}_${Math.round((oy + 240)/gridSize)}`);
+
+    // ---------------------------------------------------------
+    // 18. Inverter Half-Bridge Leg
+    // ---------------------------------------------------------
     } else if (name === 'inverter_leg') {
         const ox = 180, oy = 90;
         components.push(createComponent('V_DC', { x: ox, y: oy + 180 }, { x: ox, y: oy }));

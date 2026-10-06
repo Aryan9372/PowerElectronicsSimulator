@@ -12,7 +12,8 @@ def build_from_json(json_data):
     else:
         data = json_data
         
-    sim = Simulator()
+    sim_config = data.get('simulation', {})
+    sim = Simulator(method=sim_config.get('method', 'trapezoidal'))
     
     # Load components
     for comp_data in data.get('components', []):
@@ -27,10 +28,18 @@ def build_from_json(json_data):
         elif ctype == 'Inductor':
             sim.add_component(Inductor(cid, nodes[0], nodes[1], value=comp_data['value'], i0=comp_data.get('i0', 0.0)))
         elif ctype == 'V_AC':
+            raw_phase = comp_data.get('phase', 0.0)
+            # Support both degrees and radians
+            if comp_data.get('phase_unit') == 'rad':
+                phase_rad = raw_phase
+            elif comp_data.get('phase_unit') == 'deg' or abs(raw_phase) > 6.2831853:
+                phase_rad = raw_phase * (3.141592653589793 / 180.0)
+            else:
+                phase_rad = raw_phase
             sim.add_component(VoltageSource(cid, nodes[0], nodes[1], vtype='ac', 
                                             amplitude=comp_data['amplitude'], 
                                             freq=comp_data['freq'], 
-                                            phase=comp_data.get('phase', 0.0)))
+                                            phase=phase_rad))
         elif ctype == 'V_DC':
             sim.add_component(VoltageSource(cid, nodes[0], nodes[1], vtype='dc', value=comp_data['value']))
         elif ctype == 'Diode':

@@ -106,18 +106,25 @@
 
         <!-- Presets Menu -->
         <div class="flex items-center gap-2">
-            <span class="text-xs text-slate-400 font-semibold uppercase tracking-wider mr-1"><i class="fa-solid fa-layer-group text-cyan-400 mr-1"></i> Presets:</span>
-            <button onclick="loadPreset('full_bridge_thyristor')" class="px-2.5 py-1 text-xs rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 hover:text-white transition flex items-center gap-1.5">
-                <i class="fa-solid fa-bridge text-cyan-400"></i> 1-Phase Full-Bridge (SCR)
+            <button onclick="openPresetsModal()" class="px-3 py-1.5 text-xs font-bold rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white flex items-center gap-2 shadow-lg shadow-cyan-600/30 transition">
+                <i class="fa-solid fa-shapes text-cyan-200"></i> Topologies Library (17 Presets)
             </button>
-            <button onclick="loadPreset('mosfet_buck')" class="px-2.5 py-1 text-xs rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 hover:text-white transition flex items-center gap-1.5">
-                <i class="fa-solid fa-microchip text-emerald-400"></i> MOSFET Buck Chopper
+            <span class="text-slate-600">|</span>
+            <span class="text-xs text-slate-400 font-semibold uppercase tracking-wider mr-1">Quick:</span>
+            <button onclick="loadPreset('full_bridge_thyristor')" class="px-2 py-1 text-xs rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 hover:text-white transition flex items-center gap-1">
+                <i class="fa-solid fa-bridge text-cyan-400"></i> 1Φ Full-SCR
             </button>
-            <button onclick="loadPreset('half_wave')" class="px-2.5 py-1 text-xs rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 hover:text-white transition flex items-center gap-1.5">
-                <i class="fa-solid fa-wave-square text-amber-400"></i> Diode Rectifier
+            <button onclick="loadPreset('three_phase_bridge_scr')" class="px-2 py-1 text-xs rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 hover:text-white transition flex items-center gap-1">
+                <i class="fa-solid fa-network-wired text-purple-400"></i> 3Φ 6-Pulse SCR
             </button>
-            <button onclick="loadPreset('inverter_leg')" class="px-2.5 py-1 text-xs rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 hover:text-white transition flex items-center gap-1.5">
-                <i class="fa-solid fa-arrows-split-up-and-left text-purple-400"></i> MOSFET Half-Bridge Leg
+            <button onclick="loadPreset('mosfet_buck')" class="px-2 py-1 text-xs rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 hover:text-white transition flex items-center gap-1">
+                <i class="fa-solid fa-arrow-trend-down text-emerald-400"></i> Buck
+            </button>
+            <button onclick="loadPreset('mosfet_boost')" class="px-2 py-1 text-xs rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 hover:text-white transition flex items-center gap-1">
+                <i class="fa-solid fa-arrow-trend-up text-amber-400"></i> Boost
+            </button>
+            <button onclick="loadPreset('cuk')" class="px-2 py-1 text-xs rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 hover:text-white transition flex items-center gap-1">
+                <i class="fa-solid fa-microchip text-pink-400"></i> Ćuk
             </button>
         </div>
 
@@ -283,11 +290,17 @@
 
                     <!-- Speed Selector -->
                     <div class="flex items-center gap-1 text-[11px]">
-                        <span class="text-slate-400 mr-1"><i class="fa-solid fa-gauge text-cyan-400"></i> Speed:</span>
-                        <button onclick="setSimSpeed(0.1)" class="speed-btn px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300" id="speed-0.1">0.1x</button>
-                        <button onclick="setSimSpeed(0.25)" class="speed-btn px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300" id="speed-0.25">0.25x</button>
-                        <button onclick="setSimSpeed(0.5)" class="speed-btn px-2 py-0.5 rounded bg-cyan-900 border border-cyan-500 text-white font-bold" id="speed-0.5">0.5x</button>
-                        <button onclick="setSimSpeed(1.0)" class="speed-btn px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300" id="speed-1.0">1x</button>
+                        <span class="text-slate-400 mr-0.5"><i class="fa-solid fa-gauge text-cyan-400"></i> Speed:</span>
+                        <button onclick="setSimSpeed(0.01)" class="speed-btn px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 font-mono text-[10px]" id="speed-0.01" title="0.01x (100x Slow Motion)">0.01x</button>
+                        <button onclick="setSimSpeed(0.05)" class="speed-btn px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 font-mono text-[10px]" id="speed-0.05" title="0.05x (20x Slow Motion)">0.05x</button>
+                        <button onclick="setSimSpeed(0.1)" class="speed-btn px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 font-mono text-[10px]" id="speed-0.1" title="0.1x (10x Slow Motion)">0.1x</button>
+                        <button onclick="setSimSpeed(0.25)" class="speed-btn px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 font-mono text-[10px]" id="speed-0.25">0.25x</button>
+                        <button onclick="setSimSpeed(0.5)" class="speed-btn px-1.5 py-0.5 rounded bg-cyan-900 border border-cyan-500 text-white font-bold font-mono text-[10px]" id="speed-0.5">0.5x</button>
+                        <button onclick="setSimSpeed(1.0)" class="speed-btn px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 font-mono text-[10px]" id="speed-1.0">1x</button>
+                        <button onclick="setSimSpeed(2.0)" class="speed-btn px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 font-mono text-[10px]" id="speed-2.0">2x</button>
+                        <!-- Speed Slider -->
+                        <input type="range" id="speedSlider" min="0.01" max="2.0" step="0.01" value="0.5" oninput="setSimSpeed(parseFloat(this.value))" class="w-16 h-1 bg-slate-700 rounded cursor-pointer ml-1" title="Continuous Time Scale Slider">
+                        <span id="speedValueDisplay" class="font-mono text-cyan-400 font-bold text-[10px] min-w-[32px] text-right">0.50x</span>
                     </div>
 
                     <span class="text-slate-600">|</span>
@@ -389,6 +402,315 @@
                 <!-- Plot Container -->
                 <div class="flex-1 relative p-1 bg-slate-950 flex flex-col">
                     <div id="plot" class="w-full h-full"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Topologies Library Modal -->
+    <div id="presetsModal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="card w-full max-w-4xl max-h-[85vh] rounded-2xl flex flex-col overflow-hidden border border-slate-700 shadow-2xl bg-slate-900">
+            <!-- Modal Header -->
+            <div class="px-6 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/80">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-cyan-500/20 border border-cyan-500/50 flex items-center justify-center text-cyan-400 text-lg">
+                        <i class="fa-solid fa-shapes"></i>
+                    </div>
+                    <div>
+                        <h2 class="text-base font-bold text-white flex items-center gap-2">
+                            Converter Topologies Library <span class="text-xs px-2 py-0.5 rounded-full bg-cyan-900 text-cyan-300 font-normal">17 Circuits</span>
+                        </h2>
+                        <p class="text-xs text-slate-400">Pre-built, pre-wired, verified power electronic converters with 1-click loading</p>
+                    </div>
+                </div>
+                <button onclick="closePresetsModal()" class="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition">
+                    <i class="fa-solid fa-xmark text-sm"></i>
+                </button>
+            </div>
+
+            <!-- Categories Tabs -->
+            <div class="px-6 pt-3 border-b border-slate-800 flex gap-2 bg-slate-950/40 text-xs">
+                <button onclick="switchPresetTab('dc_dc')" id="ptab-dc_dc" class="preset-tab active px-3 py-2 border-b-2 border-cyan-400 font-bold text-cyan-400 flex items-center gap-1.5">
+                    <i class="fa-solid fa-microchip"></i> DC-DC Converters (5)
+                </button>
+                <button onclick="switchPresetTab('rect_1ph')" id="ptab-rect_1ph" class="preset-tab px-3 py-2 border-b-2 border-transparent text-slate-400 hover:text-white flex items-center gap-1.5">
+                    <i class="fa-solid fa-bridge"></i> 1-Phase Rectifiers (5)
+                </button>
+                <button onclick="switchPresetTab('rect_3ph')" id="ptab-rect_3ph" class="preset-tab px-3 py-2 border-b-2 border-transparent text-slate-400 hover:text-white flex items-center gap-1.5">
+                    <i class="fa-solid fa-network-wired"></i> 3-Phase Systems (5)
+                </button>
+                <button onclick="switchPresetTab('inverters')" id="ptab-inverters" class="preset-tab px-3 py-2 border-b-2 border-transparent text-slate-400 hover:text-white flex items-center gap-1.5">
+                    <i class="fa-solid fa-arrows-split-up-and-left"></i> Inverters (2)
+                </button>
+            </div>
+
+            <!-- Modal Content (Scrollable Grid) -->
+            <div class="flex-1 p-6 overflow-y-auto">
+                <!-- DC-DC Category -->
+                <div id="psec-dc_dc" class="preset-section grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <!-- Buck -->
+                    <div class="card p-4 rounded-xl border border-slate-700/80 hover:border-cyan-500/80 transition flex flex-col justify-between bg-slate-950/60">
+                        <div>
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="px-2 py-0.5 rounded bg-emerald-950 border border-emerald-700 text-emerald-400 text-[10px] font-bold">Step-Down</span>
+                                <span class="text-xs text-slate-400 font-mono">D=50%, 5kHz</span>
+                            </div>
+                            <h3 class="font-bold text-white text-sm mb-1">Buck Converter</h3>
+                            <p class="text-xs text-slate-400 mb-3">MOSFET chopper with freewheeling diode and LC filter. Steps 100V down to 50V DC.</p>
+                        </div>
+                        <button onclick="loadAndClosePreset('mosfet_buck')" class="w-full py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition">
+                            <i class="fa-solid fa-bolt"></i> Load Buck Circuit
+                        </button>
+                    </div>
+
+                    <!-- Boost -->
+                    <div class="card p-4 rounded-xl border border-slate-700/80 hover:border-cyan-500/80 transition flex flex-col justify-between bg-slate-950/60">
+                        <div>
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="px-2 py-0.5 rounded bg-amber-950 border border-amber-700 text-amber-400 text-[10px] font-bold">Step-Up</span>
+                                <span class="text-xs text-slate-400 font-mono">D=50%, 5kHz</span>
+                            </div>
+                            <h3 class="font-bold text-white text-sm mb-1">Boost Converter</h3>
+                            <p class="text-xs text-slate-400 mb-3">Inductive energy storage boost chopper. Steps 48V DC input up to ~96V DC output.</p>
+                        </div>
+                        <button onclick="loadAndClosePreset('mosfet_boost')" class="w-full py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition">
+                            <i class="fa-solid fa-bolt"></i> Load Boost Circuit
+                        </button>
+                    </div>
+
+                    <!-- Buck-Boost -->
+                    <div class="card p-4 rounded-xl border border-slate-700/80 hover:border-cyan-500/80 transition flex flex-col justify-between bg-slate-950/60">
+                        <div>
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="px-2 py-0.5 rounded bg-purple-950 border border-purple-700 text-purple-400 text-[10px] font-bold">Inverting</span>
+                                <span class="text-xs text-slate-400 font-mono">D=50%, 5kHz</span>
+                            </div>
+                            <h3 class="font-bold text-white text-sm mb-1">Buck-Boost Converter</h3>
+                            <p class="text-xs text-slate-400 mb-3">Reversed-polarity step-up/step-down converter with inductor storage.</p>
+                        </div>
+                        <button onclick="loadAndClosePreset('buck_boost')" class="w-full py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition">
+                            <i class="fa-solid fa-bolt"></i> Load Buck-Boost
+                        </button>
+                    </div>
+
+                    <!-- Ćuk -->
+                    <div class="card p-4 rounded-xl border border-slate-700/80 hover:border-cyan-500/80 transition flex flex-col justify-between bg-slate-950/60">
+                        <div>
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="px-2 py-0.5 rounded bg-pink-950 border border-pink-700 text-pink-400 text-[10px] font-bold">Capacitive Transfer</span>
+                                <span class="text-xs text-slate-400 font-mono">5kHz, Low Ripple</span>
+                            </div>
+                            <h3 class="font-bold text-white text-sm mb-1">Ćuk Converter</h3>
+                            <p class="text-xs text-slate-400 mb-3">Inverting converter utilizing intermediate capacitor energy transfer with continuous input/output currents.</p>
+                        </div>
+                        <button onclick="loadAndClosePreset('cuk')" class="w-full py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition">
+                            <i class="fa-solid fa-bolt"></i> Load Ćuk Circuit
+                        </button>
+                    </div>
+
+                    <!-- SEPIC -->
+                    <div class="card p-4 rounded-xl border border-slate-700/80 hover:border-cyan-500/80 transition flex flex-col justify-between bg-slate-950/60">
+                        <div>
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="px-2 py-0.5 rounded bg-blue-950 border border-blue-700 text-blue-400 text-[10px] font-bold">Non-Inverting</span>
+                                <span class="text-xs text-slate-400 font-mono">5kHz</span>
+                            </div>
+                            <h3 class="font-bold text-white text-sm mb-1">SEPIC Converter</h3>
+                            <p class="text-xs text-slate-400 mb-3">Single-Ended Primary-Inductor Converter. Allows output voltage greater than, less than, or equal to input.</p>
+                        </div>
+                        <button onclick="loadAndClosePreset('sepic')" class="w-full py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition">
+                            <i class="fa-solid fa-bolt"></i> Load SEPIC Circuit
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 1-Phase Rectifiers -->
+                <div id="psec-rect_1ph" class="preset-section hidden grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <!-- Half Wave Diode -->
+                    <div class="card p-4 rounded-xl border border-slate-700/80 hover:border-cyan-500/80 transition flex flex-col justify-between bg-slate-950/60">
+                        <div>
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="px-2 py-0.5 rounded bg-slate-800 text-slate-300 text-[10px] font-bold">Uncontrolled</span>
+                                <span class="text-xs text-slate-400 font-mono">50Hz</span>
+                            </div>
+                            <h3 class="font-bold text-white text-sm mb-1">1Φ Half-Wave Diode Rectifier</h3>
+                            <p class="text-xs text-slate-400 mb-3">Basic single-phase half-wave diode rectifier with series RL load.</p>
+                        </div>
+                        <button onclick="loadAndClosePreset('half_wave')" class="w-full py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition">
+                            <i class="fa-solid fa-bolt"></i> Load Circuit
+                        </button>
+                    </div>
+
+                    <!-- Half Wave SCR -->
+                    <div class="card p-4 rounded-xl border border-slate-700/80 hover:border-cyan-500/80 transition flex flex-col justify-between bg-slate-950/60">
+                        <div>
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="px-2 py-0.5 rounded bg-cyan-950 border border-cyan-700 text-cyan-300 text-[10px] font-bold">Controlled</span>
+                                <span class="text-xs text-slate-400 font-mono">α = 45°</span>
+                            </div>
+                            <h3 class="font-bold text-white text-sm mb-1">1Φ Half-Wave Controlled (SCR)</h3>
+                            <p class="text-xs text-slate-400 mb-3">Single thyristor converter with adjustable phase delay angle firing.</p>
+                        </div>
+                        <button onclick="loadAndClosePreset('half_wave_scr')" class="w-full py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition">
+                            <i class="fa-solid fa-bolt"></i> Load Circuit
+                        </button>
+                    </div>
+
+                    <!-- Full Bridge Diode -->
+                    <div class="card p-4 rounded-xl border border-slate-700/80 hover:border-cyan-500/80 transition flex flex-col justify-between bg-slate-950/60">
+                        <div>
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="px-2 py-0.5 rounded bg-slate-800 text-slate-300 text-[10px] font-bold">Uncontrolled</span>
+                                <span class="text-xs text-slate-400 font-mono">4 Diodes</span>
+                            </div>
+                            <h3 class="font-bold text-white text-sm mb-1">1Φ Full-Bridge Diode Rectifier</h3>
+                            <p class="text-xs text-slate-400 mb-3">Graetz full-bridge 4-diode rectifier providing full-wave DC output.</p>
+                        </div>
+                        <button onclick="loadAndClosePreset('full_bridge_diode')" class="w-full py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition">
+                            <i class="fa-solid fa-bolt"></i> Load Circuit
+                        </button>
+                    </div>
+
+                    <!-- Semi-Converter -->
+                    <div class="card p-4 rounded-xl border border-slate-700/80 hover:border-cyan-500/80 transition flex flex-col justify-between bg-slate-950/60">
+                        <div>
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="px-2 py-0.5 rounded bg-indigo-950 border border-indigo-700 text-indigo-300 text-[10px] font-bold">Half-Controlled</span>
+                                <span class="text-xs text-slate-400 font-mono">2 SCR + 2 Diode + FWD</span>
+                            </div>
+                            <h3 class="font-bold text-white text-sm mb-1">1Φ Semi-Converter (with FWD)</h3>
+                            <p class="text-xs text-slate-400 mb-3">Two SCRs on top, two diodes on bottom, and freewheeling diode clamping negative spikes.</p>
+                        </div>
+                        <button onclick="loadAndClosePreset('semi_converter')" class="w-full py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition">
+                            <i class="fa-solid fa-bolt"></i> Load Circuit
+                        </button>
+                    </div>
+
+                    <!-- Fully Controlled Bridge -->
+                    <div class="card p-4 rounded-xl border border-slate-700/80 hover:border-cyan-500/80 transition flex flex-col justify-between bg-slate-950/60">
+                        <div>
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="px-2 py-0.5 rounded bg-cyan-950 border border-cyan-700 text-cyan-300 text-[10px] font-bold">Fully-Controlled</span>
+                                <span class="text-xs text-slate-400 font-mono">4 SCRs, α=45°</span>
+                            </div>
+                            <h3 class="font-bold text-white text-sm mb-1">1Φ Fully-Controlled Full-Bridge</h3>
+                            <p class="text-xs text-slate-400 mb-3">Full-bridge converter with 4 thyristors operating in 2-quadrant mode.</p>
+                        </div>
+                        <button onclick="loadAndClosePreset('full_bridge_thyristor')" class="w-full py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition">
+                            <i class="fa-solid fa-bolt"></i> Load Circuit
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 3-Phase Systems -->
+                <div id="psec-rect_3ph" class="preset-section hidden grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <!-- 3-Phase Diode Bridge -->
+                    <div class="card p-4 rounded-xl border border-slate-700/80 hover:border-cyan-500/80 transition flex flex-col justify-between bg-slate-950/60">
+                        <div>
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="px-2 py-0.5 rounded bg-slate-800 text-slate-300 text-[10px] font-bold">6-Pulse Uncontrolled</span>
+                                <span class="text-xs text-slate-400 font-mono">6 Diodes</span>
+                            </div>
+                            <h3 class="font-bold text-white text-sm mb-1">3Φ Full-Bridge Diode Rectifier</h3>
+                            <p class="text-xs text-slate-400 mb-3">6-diode 3-phase uncontrolled bridge converter with ultra-low DC ripple factor.</p>
+                        </div>
+                        <button onclick="loadAndClosePreset('three_phase_bridge_diode')" class="w-full py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition">
+                            <i class="fa-solid fa-bolt"></i> Load 3Φ Diode Bridge
+                        </button>
+                    </div>
+
+                    <!-- 3-Phase 6-Pulse SCR Bridge -->
+                    <div class="card p-4 rounded-xl border border-slate-700/80 hover:border-cyan-500/80 transition flex flex-col justify-between bg-slate-950/60">
+                        <div>
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="px-2 py-0.5 rounded bg-purple-950 border border-purple-700 text-purple-300 text-[10px] font-bold">6-Pulse Controlled</span>
+                                <span class="text-xs text-slate-400 font-mono">6 SCRs, α=30°</span>
+                            </div>
+                            <h3 class="font-bold text-white text-sm mb-1">3Φ Fully-Controlled 6-Pulse SCR Bridge</h3>
+                            <p class="text-xs text-slate-400 mb-3">Industrial standard 6-thyristor bridge fired in 60° sequential intervals for smooth DC voltage control.</p>
+                        </div>
+                        <button onclick="loadAndClosePreset('three_phase_bridge_scr')" class="w-full py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition">
+                            <i class="fa-solid fa-bolt"></i> Load 3Φ SCR Bridge
+                        </button>
+                    </div>
+
+                    <!-- 3-Phase Half-Wave Diode -->
+                    <div class="card p-4 rounded-xl border border-slate-700/80 hover:border-cyan-500/80 transition flex flex-col justify-between bg-slate-950/60">
+                        <div>
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="px-2 py-0.5 rounded bg-slate-800 text-slate-300 text-[10px] font-bold">3-Pulse Uncontrolled</span>
+                                <span class="text-xs text-slate-400 font-mono">3 Diodes</span>
+                            </div>
+                            <h3 class="font-bold text-white text-sm mb-1">3Φ Half-Wave Diode Rectifier</h3>
+                            <p class="text-xs text-slate-400 mb-3">Star-connected 3-phase source with 3 diodes feeding a common load to neutral.</p>
+                        </div>
+                        <button onclick="loadAndClosePreset('three_phase_half_wave_diode')" class="w-full py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition">
+                            <i class="fa-solid fa-bolt"></i> Load Circuit
+                        </button>
+                    </div>
+
+                    <!-- 3-Phase Half-Wave SCR -->
+                    <div class="card p-4 rounded-xl border border-slate-700/80 hover:border-cyan-500/80 transition flex flex-col justify-between bg-slate-950/60">
+                        <div>
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="px-2 py-0.5 rounded bg-cyan-950 border border-cyan-700 text-cyan-300 text-[10px] font-bold">3-Pulse Controlled</span>
+                                <span class="text-xs text-slate-400 font-mono">3 SCRs</span>
+                            </div>
+                            <h3 class="font-bold text-white text-sm mb-1">3Φ Half-Wave Controlled (SCR)</h3>
+                            <p class="text-xs text-slate-400 mb-3">3-pulse controlled rectifier with 3 thyristors connected to a 3-phase neutral.</p>
+                        </div>
+                        <button onclick="loadAndClosePreset('three_phase_half_wave_scr')" class="w-full py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition">
+                            <i class="fa-solid fa-bolt"></i> Load Circuit
+                        </button>
+                    </div>
+
+                    <!-- 3-Phase Semi-Converter -->
+                    <div class="card p-4 rounded-xl border border-slate-700/80 hover:border-cyan-500/80 transition flex flex-col justify-between bg-slate-950/60">
+                        <div>
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="px-2 py-0.5 rounded bg-indigo-950 border border-indigo-700 text-indigo-300 text-[10px] font-bold">Half-Controlled</span>
+                                <span class="text-xs text-slate-400 font-mono">3 SCR + 3 Diode</span>
+                            </div>
+                            <h3 class="font-bold text-white text-sm mb-1">3Φ Semi-Converter</h3>
+                            <p class="text-xs text-slate-400 mb-3">3 thyristors on positive rail and 3 diodes on negative rail for economical phase control.</p>
+                        </div>
+                        <button onclick="loadAndClosePreset('three_phase_semi_converter')" class="w-full py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition">
+                            <i class="fa-solid fa-bolt"></i> Load Circuit
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Inverters Category -->
+                <div id="psec-inverters" class="preset-section hidden grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <!-- 1-Phase H-Bridge -->
+                    <div class="card p-4 rounded-xl border border-slate-700/80 hover:border-cyan-500/80 transition flex flex-col justify-between bg-slate-950/60">
+                        <div>
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="px-2 py-0.5 rounded bg-rose-950 border border-rose-700 text-rose-300 text-[10px] font-bold">DC-AC Inverter</span>
+                                <span class="text-xs text-slate-400 font-mono">4 MOSFETs</span>
+                            </div>
+                            <h3 class="font-bold text-white text-sm mb-1">1Φ H-Bridge Inverter</h3>
+                            <p class="text-xs text-slate-400 mb-3">Full-bridge MOSFET inverter converting 300V DC into alternating AC across an inductive load.</p>
+                        </div>
+                        <button onclick="loadAndClosePreset('h_bridge_inverter')" class="w-full py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition">
+                            <i class="fa-solid fa-bolt"></i> Load Inverter
+                        </button>
+                    </div>
+
+                    <!-- 3-Phase VSI -->
+                    <div class="card p-4 rounded-xl border border-slate-700/80 hover:border-cyan-500/80 transition flex flex-col justify-between bg-slate-950/60">
+                        <div>
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="px-2 py-0.5 rounded bg-purple-950 border border-purple-700 text-purple-300 text-[10px] font-bold">3Φ Voltage Source</span>
+                                <span class="text-xs text-slate-400 font-mono">6 MOSFETs</span>
+                            </div>
+                            <h3 class="font-bold text-white text-sm mb-1">3Φ Voltage Source Inverter (VSI)</h3>
+                            <p class="text-xs text-slate-400 mb-3">Standard 6-switch MOSFET bridge driving a balanced 3-phase AC load.</p>
+                        </div>
+                        <button onclick="loadAndClosePreset('three_phase_inverter')" class="w-full py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition">
+                            <i class="fa-solid fa-bolt"></i> Load 3Φ Inverter
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
